@@ -295,21 +295,26 @@
     color:var(--gold); margin-bottom:6px;
   }
   .exp-text{font-size:14.5px; line-height:1.65; color:var(--ink); padding-right:70px;}
+  .choice-review{margin-top:14px; padding-top:13px; border-top:1px dashed var(--line);}
+  .choice-review-title{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.12em;
+    color:var(--gold); margin-bottom:8px;
+  }
+  .choice-review-list{display:flex; flex-direction:column; gap:7px;}
+  .choice-review-item{
+    display:grid; grid-template-columns:28px 1fr; gap:8px; align-items:start;
+    padding:9px 10px; border-radius:7px; background:#F7F3E9;
+    font-size:13.5px; line-height:1.55;
+  }
+  .choice-review-item.correct{background:#EEF8F0;}
+  .choice-review-mark{font-weight:800; color:var(--stamp-red);}
+  .choice-review-item.correct .choice-review-mark{color:var(--stamp-green);}
+  .choice-review-reason b{font-weight:800;}
 
   .footer-note{
     text-align:center; font-size:11.5px; color:var(--ink-soft);
     margin-top:22px; font-family:'IBM Plex Mono',monospace;
   }
-
-  .key-concept{
-    margin:0 0 12px;
-    padding:11px 13px;
-    border-left:4px solid var(--gold);
-    background:#FFF9E8;
-    font-size:13.5px;
-    line-height:1.6;
-  }
-  .key-concept b{color:var(--gold); margin-right:6px;}
 
   @media (max-width:480px){
     .card{padding:20px 16px 18px;}
@@ -356,9 +361,9 @@
 
     <div class="result" id="result">
       <div class="stamp" id="stamp">오답</div>
-      <div class="key-concept" id="keyConcept"></div>
       <div class="exp-label">해설</div>
       <div class="exp-text" id="expText"></div>
+      <div class="choice-review" id="choiceReview"></div>
     </div>
   </div>
 
@@ -765,8 +770,8 @@ const submitBtn = document.getElementById('submitBtn');
 const nextBtn = document.getElementById('nextBtn');
 const resultEl = document.getElementById('result');
 const stampEl = document.getElementById('stamp');
-const keyConceptEl = document.getElementById('keyConcept');
 const expText = document.getElementById('expText');
+const choiceReviewEl = document.getElementById('choiceReview');
 const reviewToggle = document.getElementById('reviewToggle');
 const prevBtn = document.getElementById('prevBtn');
 const navNextBtn = document.getElementById('navNextBtn');
@@ -959,6 +964,57 @@ function selectChoice(idx){
   submitBtn.disabled = false;
 }
 
+function isNegativeQuestion(question){
+  return /틀린|옳지\s*않|아닌\s*것|해당하지\s*않|거리가\s*먼|적절하지\s*않|잘못된/.test(question);
+}
+
+function isCalculationQuestion(question){
+  return /계산|결과|출력|값은|개수|기간|주소|라인|복잡도|간선|회전\s*후|순회|스케줄링/.test(question);
+}
+
+function getWrongChoiceReason(item, acceptedAnswers){
+  const answers = acceptedAnswers.map(index => item.c[index]).filter(Boolean).join(' 또는 ');
+  if(isNegativeQuestion(item.q)){
+    return `문제에서 묻는 분류나 특징에 포함되는 옳은 내용이므로, 예외·오류를 고르는 이 문제의 답이 아니다.`;
+  }
+  if(isCalculationQuestion(item.q)){
+    return `문제의 조건을 같은 순서로 적용해 계산하면 ${answers}이(가) 나오므로 이 값은 계산 결과와 일치하지 않는다.`;
+  }
+  if(/순서|나열|절차|단계/.test(item.q)){
+    return `요구된 단계의 선후 관계가 ${answers}과(와) 달라 올바른 절차가 아니다.`;
+  }
+  return `문제에 제시된 정의·용도·핵심 특징은 ${answers}을(를) 가리킨다. 이 선택지는 적용 대상이나 역할이 다른 개념이므로 오답이다.`;
+}
+
+function renderChoiceReview(item, acceptedAnswers){
+  choiceReviewEl.innerHTML = '';
+  const title = document.createElement('div');
+  title.className = 'choice-review-title';
+  title.textContent = '선택지별 해설';
+  const list = document.createElement('div');
+  list.className = 'choice-review-list';
+
+  item.c.forEach((choice, index) => {
+    const correct = acceptedAnswers.includes(index);
+    const row = document.createElement('div');
+    row.className = `choice-review-item${correct ? ' correct' : ''}`;
+    const mark = document.createElement('div');
+    mark.className = 'choice-review-mark';
+    mark.textContent = CHOICE_LABELS[index];
+    const reason = document.createElement('div');
+    reason.className = 'choice-review-reason';
+    const choiceName = document.createElement('b');
+    choiceName.textContent = choice || `${CHOICE_LABELS[index]}번 선택지`;
+    reason.appendChild(choiceName);
+    reason.appendChild(document.createTextNode(correct
+      ? ` — 정답. 문제의 조건과 정의에 부합한다.`
+      : ` — ${getWrongChoiceReason(item, acceptedAnswers)}`));
+    row.append(mark, reason);
+    list.appendChild(row);
+  });
+  choiceReviewEl.append(title, list);
+}
+
 function submitAnswer(){
   if(selected === null || answered) return;
   answered = true;
@@ -995,12 +1051,8 @@ function submitAnswer(){
 
   stampEl.textContent = isCorrect ? '정답' : '오답';
   stampEl.className = 'stamp' + (isCorrect ? ' ok' : '');
-  const concept = item.k
-    || (currentSubject === '필수 계산 문제' ? CALC_CONCEPTS[currentIndex] : '')
-    || (isExamSubject() ? inferExistingConcept(item.q, currentSubject) : '');
-  keyConceptEl.innerHTML = concept ? `<b>필수 개념</b>${concept}` : '';
-  keyConceptEl.style.display = concept ? 'block' : 'none';
   expText.textContent = item.e;
+  renderChoiceReview(item, acceptedAnswers);
   resultEl.classList.add('show');
 
   submitBtn.style.display = 'none';
