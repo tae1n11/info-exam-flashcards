@@ -325,6 +325,15 @@
   }
   .official-explanation.show{display:block;}
   .official-explanation-text{font-size:14.5px; line-height:1.75; color:var(--ink); white-space:pre-wrap;}
+  .official-explanation-image{
+    display:none;
+    width:100%; height:auto;
+    margin-top:8px;
+    background:#fff;
+    border:1px solid var(--paper-line);
+    cursor:zoom-in;
+  }
+  .official-explanation-image.show{display:block;}
   .explanation-editor{
     margin-top:16px;
     padding-top:14px;
@@ -424,8 +433,9 @@
       <div class="exp-label">정답</div>
       <div class="exp-text" id="expText"></div>
       <div class="official-explanation" id="officialExplanation">
-        <div class="exp-label">쉬운 해설</div>
+        <div class="exp-label">해설</div>
         <div class="official-explanation-text" id="officialExplanationText"></div>
+        <img class="official-explanation-image" id="officialExplanationImage" alt="문제 해설 원본 이미지">
       </div>
       <div class="explanation-editor">
         <label class="editor-label" for="explanationInput">
@@ -809,6 +819,7 @@ const stampEl = document.getElementById('stamp');
 const expText = document.getElementById('expText');
 const officialExplanation = document.getElementById('officialExplanation');
 const officialExplanationText = document.getElementById('officialExplanationText');
+const officialExplanationImage = document.getElementById('officialExplanationImage');
 const explanationInput = document.getElementById('explanationInput');
 const saveExplanationBtn = document.getElementById('saveExplanationBtn');
 const deleteExplanationBtn = document.getElementById('deleteExplanationBtn');
@@ -965,10 +976,12 @@ function renderCard(){
   qnoEl.textContent = `문 ${String(localIndex+1).padStart(2,'0')}`;
   const imageOffset = EXAM_IMAGE_OFFSETS[currentSubject];
   const imageNumber = imageOffset === undefined ? null : imageOffset + localIndex + 1;
-  if(imageNumber){
-    const imagePath = `${examSet.imageDir}/q${String(imageNumber).padStart(3,'0')}.webp`;
+  const imagePath = item.image || (imageNumber
+    ? `${examSet.imageDir}/q${String(imageNumber).padStart(3,'0')}.webp`
+    : null);
+  if(imagePath){
     questionImage.src = imagePath;
-    questionImage.alt = `${currentSubject} ${currentIndex+1}번 기출문제 원본`;
+    questionImage.alt = `${currentSubject} ${localIndex+1}번 문제 원본`;
     questionImageWrap.classList.add('show');
     questionText.style.display = 'none';
   }else{
@@ -978,11 +991,12 @@ function renderCard(){
   }
   questionText.textContent = item.q;
   choicesEl.innerHTML = "";
-  choicesEl.classList.toggle('compact', isExamSubject());
+  const imageChoiceMode = isExamSubject() || Boolean(item.image);
+  choicesEl.classList.toggle('compact', imageChoiceMode);
   item.c.forEach((choiceText, idx) => {
     const div = document.createElement('div');
     div.className = 'choice';
-    const visibleChoiceText = isExamSubject() ? '' : choiceText;
+    const visibleChoiceText = imageChoiceMode ? '' : choiceText;
     const mark = document.createElement('span');
     mark.className = 'mark';
     mark.textContent = CHOICE_LABELS[idx];
@@ -1082,7 +1096,15 @@ function submitAnswer(){
     .join(' 또는 ');
   expText.textContent = answerText;
   officialExplanationText.textContent = item.e || '';
-  officialExplanation.classList.toggle('show', Boolean(item.e));
+  officialExplanationText.style.display = item.explanationImage ? 'none' : 'block';
+  if(item.explanationImage){
+    officialExplanationImage.src = item.explanationImage;
+    officialExplanationImage.classList.add('show');
+  }else{
+    officialExplanationImage.removeAttribute('src');
+    officialExplanationImage.classList.remove('show');
+  }
+  officialExplanation.classList.toggle('show', Boolean(item.e || item.explanationImage));
   loadExplanation();
   resultEl.classList.add('show');
 
@@ -1145,6 +1167,12 @@ deleteExplanationBtn.addEventListener('click', deleteExplanation);
 questionImage.addEventListener('click', () => {
   if(!questionImage.src) return;
   modalImage.src = questionImage.src;
+  imageModal.classList.add('show');
+  imageModal.setAttribute('aria-hidden', 'false');
+});
+officialExplanationImage.addEventListener('click', () => {
+  if(!officialExplanationImage.src) return;
+  modalImage.src = officialExplanationImage.src;
   imageModal.classList.add('show');
   imageModal.setAttribute('aria-hidden', 'false');
 });
