@@ -68,18 +68,37 @@
   .tabs{
     margin:18px 0 16px;
   }
-  .tab-group{margin-bottom:13px;}
-  .tab-group:last-child{margin-bottom:0;}
-  .tab-group-title{
-    display:flex; align-items:center; gap:8px;
-    margin:0 0 7px 2px;
-    font-family:'Noto Serif KR',serif;
-    font-size:14px; font-weight:900;
-    color:var(--ink);
+  .group-switch{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-bottom:10px;
   }
-  .tab-group-title::after{
-    content:""; flex:1; height:1px;
-    background:var(--paper-line);
+  .group-tab{
+    min-height:48px;
+    padding:10px 14px;
+    border:2px solid var(--ink);
+    border-radius:6px 6px 0 0;
+    background:#EAE4D5;
+    color:var(--ink-soft);
+    font-family:'Noto Serif KR',serif;
+    font-size:15px;
+    font-weight:900;
+    cursor:pointer;
+    transition:background .12s ease, color .12s ease, transform .12s ease;
+  }
+  .group-tab:hover{transform:translateY(-2px);}
+  .group-tab.active{
+    background:var(--ink);
+    color:#fff;
+    border-bottom-color:var(--stamp-red);
+    box-shadow:0 4px 0 var(--stamp-red);
+  }
+  .tab-panel{
+    padding:12px;
+    border:1.5px solid var(--ink);
+    border-radius:3px;
+    background:rgba(255,255,255,.42);
   }
   .tab-list{display:flex; flex-wrap:wrap; gap:6px;}
   .tab{
@@ -739,31 +758,48 @@ function getExamIndices(){
 
 function renderTabs(){
   tabsEl.innerHTML = "";
-  Object.entries(SUBJECT_GROUPS).forEach(([groupName, groupSubjects]) => {
-    const group = document.createElement('section');
-    group.className = 'tab-group';
-    const title = document.createElement('h2');
-    title.className = 'tab-group-title';
-    title.textContent = groupName;
-    const list = document.createElement('div');
-    list.className = 'tab-list';
-    groupSubjects.forEach((s, i) => {
-      const tab = document.createElement('div');
-      tab.className = 'tab' + (s === currentSubject ? ' active' : '');
-      tab.innerHTML = `<span class="num">${String(i+1).padStart(2,'0')}</span>${s}`;
-      tab.onclick = () => {
-        currentSubject = s;
-        const visible = getVisibleIndices();
-        currentIndex = visible.length ? visible[0] : 0;
-        renderTabs();
-        renderCard();
-      };
-      list.appendChild(tab);
-    });
-    group.appendChild(title);
-    group.appendChild(list);
-    tabsEl.appendChild(group);
+  const activeGroup = Object.entries(SUBJECT_GROUPS)
+    .find(([, groupSubjects]) => groupSubjects.includes(currentSubject))?.[0]
+    || Object.keys(SUBJECT_GROUPS)[0];
+
+  const groupSwitch = document.createElement('div');
+  groupSwitch.className = 'group-switch';
+  Object.keys(SUBJECT_GROUPS).forEach(groupName => {
+    const groupTab = document.createElement('button');
+    groupTab.type = 'button';
+    groupTab.className = 'group-tab' + (groupName === activeGroup ? ' active' : '');
+    groupTab.textContent = groupName;
+    groupTab.onclick = () => {
+      if(groupName === activeGroup) return;
+      currentSubject = SUBJECT_GROUPS[groupName][0];
+      currentIndex = 0;
+      wrongOnly = false;
+      renderTabs();
+      renderCard();
+    };
+    groupSwitch.appendChild(groupTab);
   });
+  tabsEl.appendChild(groupSwitch);
+
+  const panel = document.createElement('section');
+  panel.className = 'tab-panel';
+  const list = document.createElement('div');
+  list.className = 'tab-list';
+  SUBJECT_GROUPS[activeGroup].forEach((subject, index) => {
+    const tab = document.createElement('div');
+    tab.className = 'tab' + (subject === currentSubject ? ' active' : '');
+    tab.innerHTML = `<span class="num">${String(index+1).padStart(2,'0')}</span>${subject}`;
+    tab.onclick = () => {
+      currentSubject = subject;
+      const visible = getVisibleIndices();
+      currentIndex = visible.length ? visible[0] : 0;
+      renderTabs();
+      renderCard();
+    };
+    list.appendChild(tab);
+  });
+  panel.appendChild(list);
+  tabsEl.appendChild(panel);
 }
 
 function renderStatus(){
