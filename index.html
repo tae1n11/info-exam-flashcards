@@ -314,6 +314,51 @@
     color:var(--gold); margin-bottom:6px;
   }
   .exp-text{font-size:14.5px; line-height:1.65; color:var(--ink); padding-right:70px;}
+  .explanation-editor{
+    margin-top:16px;
+    padding-top:14px;
+    border-top:1px dashed var(--paper-line);
+  }
+  .editor-label{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+    margin-bottom:7px;
+    font-size:13px;
+    font-weight:800;
+    color:var(--ink);
+  }
+  .editor-label small{font-size:11px; font-weight:500; color:var(--ink-soft);}
+  .explanation-input{
+    width:100%;
+    min-height:110px;
+    resize:vertical;
+    box-sizing:border-box;
+    padding:11px 12px;
+    border:1.5px solid var(--ink);
+    border-radius:4px;
+    background:#FFFDF7;
+    color:var(--ink);
+    font-family:'Noto Sans KR',sans-serif;
+    font-size:14px;
+    line-height:1.6;
+  }
+  .explanation-input:focus{outline:3px solid rgba(181,138,46,.2); border-color:var(--gold);}
+  .editor-actions{display:flex; align-items:center; gap:7px; margin-top:8px;}
+  .editor-btn{
+    padding:7px 11px;
+    border:1.5px solid var(--ink);
+    border-radius:3px;
+    background:var(--card-bg);
+    color:var(--ink);
+    font-family:'Noto Sans KR',sans-serif;
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .editor-btn.save{background:var(--ink); color:#fff;}
+  .editor-status{margin-left:auto; font-size:11.5px; color:var(--stamp-green);}
 
   .footer-note{
     text-align:center; font-size:11.5px; color:var(--ink-soft);
@@ -367,6 +412,18 @@
       <div class="stamp" id="stamp">오답</div>
       <div class="exp-label">정답</div>
       <div class="exp-text" id="expText"></div>
+      <div class="explanation-editor">
+        <label class="editor-label" for="explanationInput">
+          <span>해설 직접 편집</span>
+          <small>이 브라우저에 문항별로 저장됩니다.</small>
+        </label>
+        <textarea class="explanation-input" id="explanationInput" placeholder="이 문제를 이해하는 데 필요한 해설이나 암기 내용을 입력하세요."></textarea>
+        <div class="editor-actions">
+          <button class="editor-btn save" id="saveExplanationBtn" type="button">해설 저장</button>
+          <button class="editor-btn" id="deleteExplanationBtn" type="button">내용 삭제</button>
+          <span class="editor-status" id="explanationStatus" aria-live="polite"></span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -683,6 +740,15 @@ let randomOrders = {};
 let scores = {};
 subjects.forEach(s => scores[s] = {correct:0, wrong:0, done:new Set(), wrongItems:new Set()});
 const STORAGE_KEY = 'infoEngineerFlashcardsProgressV2';
+const EXPLANATION_STORAGE_KEY = 'infoEngineerFlashcardsExplanationsV1';
+let savedExplanations = {};
+
+try{
+  savedExplanations = JSON.parse(localStorage.getItem(EXPLANATION_STORAGE_KEY) || '{}');
+}catch(error){
+  console.warn('저장된 해설을 불러오지 못했습니다.', error);
+  savedExplanations = {};
+}
 
 try{
   const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
@@ -725,6 +791,10 @@ const nextBtn = document.getElementById('nextBtn');
 const resultEl = document.getElementById('result');
 const stampEl = document.getElementById('stamp');
 const expText = document.getElementById('expText');
+const explanationInput = document.getElementById('explanationInput');
+const saveExplanationBtn = document.getElementById('saveExplanationBtn');
+const deleteExplanationBtn = document.getElementById('deleteExplanationBtn');
+const explanationStatus = document.getElementById('explanationStatus');
 const reviewToggle = document.getElementById('reviewToggle');
 const prevBtn = document.getElementById('prevBtn');
 const navNextBtn = document.getElementById('navNextBtn');
@@ -918,6 +988,36 @@ function selectChoice(idx){
   submitBtn.disabled = false;
 }
 
+function getExplanationKey(){
+  return `${currentSubject}:${currentIndex}`;
+}
+
+function loadExplanation(){
+  explanationInput.value = savedExplanations[getExplanationKey()] || '';
+  explanationStatus.textContent = explanationInput.value ? '저장된 해설' : '';
+}
+
+function saveExplanation(){
+  const key = getExplanationKey();
+  const text = explanationInput.value.trim();
+  if(text){
+    savedExplanations[key] = text;
+    explanationInput.value = text;
+    explanationStatus.textContent = '저장되었습니다.';
+  }else{
+    delete savedExplanations[key];
+    explanationStatus.textContent = '빈 내용은 저장하지 않았습니다.';
+  }
+  localStorage.setItem(EXPLANATION_STORAGE_KEY, JSON.stringify(savedExplanations));
+}
+
+function deleteExplanation(){
+  delete savedExplanations[getExplanationKey()];
+  localStorage.setItem(EXPLANATION_STORAGE_KEY, JSON.stringify(savedExplanations));
+  explanationInput.value = '';
+  explanationStatus.textContent = '삭제되었습니다.';
+}
+
 function submitAnswer(){
   if(selected === null || answered) return;
   answered = true;
@@ -958,6 +1058,7 @@ function submitAnswer(){
     .map(index => `${CHOICE_LABELS[index]} ${item.c[index] || ''}`.trim())
     .join(' 또는 ');
   expText.textContent = answerText;
+  loadExplanation();
   resultEl.classList.add('show');
 
   submitBtn.style.display = 'none';
@@ -1014,6 +1115,8 @@ navNextBtn.addEventListener('click', () => moveCard(1));
 reviewToggle.addEventListener('click', toggleWrongOnly);
 examSetSelect.addEventListener('change', selectExamSet);
 shuffleBtn.addEventListener('click', shuffleExam);
+saveExplanationBtn.addEventListener('click', saveExplanation);
+deleteExplanationBtn.addEventListener('click', deleteExplanation);
 questionImage.addEventListener('click', () => {
   if(!questionImage.src) return;
   modalImage.src = questionImage.src;
