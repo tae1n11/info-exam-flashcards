@@ -1015,7 +1015,7 @@ function renderCard(){
   submitBtn.style.display = 'block';
   nextBtn.style.display = 'none';
   resultEl.classList.remove('show');
-  explanationEditor.style.display = isKeywordCard ? 'none' : 'block';
+  explanationEditor.style.display = (isKeywordCard || item.noExplanation) ? 'none' : 'block';
   const canNavigate = getVisibleIndices().length > 1;
   prevBtn.disabled = !canNavigate;
   navNextBtn.disabled = !canNavigate;
