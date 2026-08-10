@@ -81,6 +81,23 @@
     font-size:11px; color:var(--stamp-green);
     flex-basis:100%;
   }
+  .sync-status{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px; color:var(--ink-soft);
+    flex-basis:100%;
+  }
+  .mini-btn{
+    padding:6px 10px;
+    border:1.5px solid var(--ink);
+    border-radius:3px;
+    background:var(--card-bg);
+    color:var(--ink);
+    font-family:'Noto Sans KR',sans-serif;
+    font-size:11.5px; font-weight:700;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .mini-btn:hover{background:#fff;}
 
   /* ===== Subject tabs (like index tabs on an exam booklet) ===== */
   .tabs{
@@ -478,7 +495,9 @@
     <div class="user-row">
       <label for="usernameInput">유저명</label>
       <input type="text" id="usernameInput" placeholder="이름 입력 후 Enter (미입력 시 기본 저장소)" maxlength="24">
+      <button class="mini-btn" id="manualSyncBtn" type="button">☁️ 지금 동기화</button>
       <span class="user-status" id="userStatus"></span>
+      <span class="sync-status" id="syncStatus">☁️ 유저명을 입력하면 아이패드/맥북 간 자동 동기화됩니다.</span>
     </div>
   </div>
 
@@ -558,6 +577,61 @@
 <script src="정보처리기사_플래시카드_잘못된문장찾기.js"></script>
 <script src="정보처리기사_플래시카드_키워드.js"></script>
 <script src="정보처리기사_플래시카드_종류순서.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
+  import {
+    getFirestore, doc, getDoc, setDoc, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCduvryfVLDS7NlcLKbEC2umdS35XI4cMs",
+    authDomain: "info-exam-flashcards.firebaseapp.com",
+    projectId: "info-exam-flashcards",
+    storageBucket: "info-exam-flashcards.firebasestorage.app",
+    messagingSenderId: "476008891647",
+    appId: "1:476008891647:web:3e1e5dab50a2b7ee7df8ca",
+    measurementId: "G-ZN4RB6G8WM"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Firestore doc IDs can't contain '/', so encode the username defensively.
+  function sanitizeUserId(name){
+    return encodeURIComponent(name.trim());
+  }
+
+  window.cloudSync = {
+    async save(username, payload){
+      if(!username) return false;
+      try{
+        await setDoc(doc(db, 'progress', sanitizeUserId(username)), {
+          ...payload,
+          updatedAt: serverTimestamp()
+        });
+        return true;
+      }catch(error){
+        console.warn('클라우드 저장 실패', error);
+        return false;
+      }
+    },
+    async load(username){
+      if(!username) return null;
+      try{
+        const snap = await getDoc(doc(db, 'progress', sanitizeUserId(username)));
+        return snap.exists() ? snap.data() : null;
+      }catch(error){
+        console.warn('클라우드 불러오기 실패', error);
+        return null;
+      }
+    }
+  };
+
+  // Signal the main (classic) script that cloud sync is ready to use.
+  // Module scripts execute after the classic script has already run once,
+  // so the main script listens for this event to trigger the first sync.
+  window.dispatchEvent(new CustomEvent('cloudsync-ready'));
+</script>
 <script>
 const DATA = {
   "소프트웨어 설계": [
@@ -806,6 +880,7 @@ function saveProgress(){
     };
   });
   localStorage.setItem(scopedKey(STORAGE_KEY), JSON.stringify(saved));
+  scheduleCloudPush();
 }
 
 const tabsEl = document.getElementById('tabs');
@@ -841,6 +916,8 @@ const examSetSelect = document.getElementById('examSetSelect');
 const shuffleBtn = document.getElementById('shuffleBtn');
 const usernameInput = document.getElementById('usernameInput');
 const userStatus = document.getElementById('userStatus');
+const syncStatusEl = document.getElementById('syncStatus');
+const manualSyncBtn = document.getElementById('manualSyncBtn');
 const bookmarkToggleBtn = document.getElementById('bookmarkToggleBtn');
 const reviewMixBtn = document.getElementById('reviewMixBtn');
 const exportBtn = document.getElementById('exportBtn');
@@ -1010,7 +1087,105 @@ function switchUser(rawName){
   updateUserStatus();
   renderTabs();
   renderCard();
+  pullFromCloud();
 }
+
+/* ===== 클라우드 동기화 (Firestore) =====
+   같은 유저명으로 다른 기기에서 접속하면 오답/북마크/해설 메모가
+   자동으로 합쳐지고(union merge), 합쳐진 결과가 다시 클라우드로 올라갑니다.
+   주의: 북마크/오답 표시를 "해제"한 것은 클라우드 병합 특성상
+   다른 기기로 자동 전파되지 않습니다 (추가된 내용만 항상 합쳐집니다). */
+let cloudSyncTimer = null;
+
+function setSyncStatus(text){
+  if(syncStatusEl) syncStatusEl.textContent = text;
+}
+
+function buildCloudPayload(){
+  const progress = {};
+  subjects.forEach(s => {
+    progress[s] = {
+      done:[...scores[s].done],
+      wrongItems:[...scores[s].wrongItems],
+      bookmarks:[...scores[s].bookmarks]
+    };
+  });
+  return { progress, explanations: savedExplanations };
+}
+
+function scheduleCloudPush(){
+  if(!currentUser || !window.cloudSync) return;
+  clearTimeout(cloudSyncTimer);
+  setSyncStatus('☁️ 동기화 대기 중...');
+  cloudSyncTimer = setTimeout(pushToCloud, 1200);
+}
+
+async function pushToCloud(){
+  if(!currentUser || !window.cloudSync) return;
+  setSyncStatus('☁️ 동기화 중...');
+  const ok = await window.cloudSync.save(currentUser, buildCloudPayload());
+  setSyncStatus(ok
+    ? `☁️ 동기화 완료 (${new Date().toLocaleTimeString('ko-KR')})`
+    : '☁️ 동기화 실패 - 잠시 후 다시 시도해주세요.');
+}
+
+function mergeCloudData(cloudData){
+  let changed = false;
+  const cloudProgress = cloudData.progress || {};
+  subjects.forEach(s => {
+    const src = cloudProgress[s];
+    if(!src) return;
+    (src.done || []).forEach(i => {
+      if(i < DATA[s].length && !scores[s].done.has(i)){ scores[s].done.add(i); changed = true; }
+    });
+    (src.wrongItems || []).forEach(i => {
+      if(i < DATA[s].length && !scores[s].wrongItems.has(i)){ scores[s].wrongItems.add(i); changed = true; }
+    });
+    (src.bookmarks || []).forEach(i => {
+      if(i < DATA[s].length && !scores[s].bookmarks.has(i)){ scores[s].bookmarks.add(i); changed = true; }
+    });
+    scores[s].wrong = scores[s].wrongItems.size;
+    scores[s].correct = Math.max(0, scores[s].done.size - scores[s].wrong);
+  });
+  const cloudExpl = cloudData.explanations || {};
+  Object.keys(cloudExpl).forEach(key => {
+    if(!(key in savedExplanations)){
+      savedExplanations[key] = cloudExpl[key];
+      changed = true;
+    }
+  });
+  return changed;
+}
+
+async function pullFromCloud(){
+  if(!currentUser){
+    setSyncStatus('☁️ 유저명을 입력하면 아이패드/맥북 간 자동 동기화됩니다.');
+    return;
+  }
+  if(!window.cloudSync){
+    setSyncStatus('☁️ 동기화 모듈을 불러오는 중...');
+    return;
+  }
+  setSyncStatus('☁️ 불러오는 중...');
+  const cloudData = await window.cloudSync.load(currentUser);
+  if(cloudData){
+    const changed = mergeCloudData(cloudData);
+    if(changed){
+      saveProgress();
+      localStorage.setItem(scopedKey(EXPLANATION_STORAGE_KEY), JSON.stringify(savedExplanations));
+      const visible = getVisibleIndices();
+      if(!visible.includes(currentIndex)) currentIndex = visible.length ? visible[0] : 0;
+      renderTabs();
+      renderCard();
+    }
+  }
+  // Push the merged (or first-time) local state back up so both devices converge.
+  await pushToCloud();
+}
+
+window.addEventListener('cloudsync-ready', () => {
+  if(currentUser) pullFromCloud();
+});
 
 function isCurrentBookmarked(){
   return Boolean(scores[currentSubject]) && scores[currentSubject].bookmarks.has(currentIndex);
@@ -1260,11 +1435,13 @@ function saveExplanation(){
     explanationStatus.textContent = '빈 내용은 저장하지 않았습니다.';
   }
   localStorage.setItem(scopedKey(EXPLANATION_STORAGE_KEY), JSON.stringify(savedExplanations));
+  scheduleCloudPush();
 }
 
 function deleteExplanation(){
   delete savedExplanations[getExplanationKey()];
   localStorage.setItem(scopedKey(EXPLANATION_STORAGE_KEY), JSON.stringify(savedExplanations));
+  scheduleCloudPush();
   explanationInput.value = '';
   explanationStatus.textContent = '삭제되었습니다.';
 }
@@ -1415,6 +1592,7 @@ usernameInput.addEventListener('keydown', event => {
     usernameInput.blur();
   }
 });
+manualSyncBtn.addEventListener('click', pullFromCloud);
 saveExplanationBtn.addEventListener('click', saveExplanation);
 deleteExplanationBtn.addEventListener('click', deleteExplanation);
 questionImage.addEventListener('click', () => {
@@ -1440,6 +1618,9 @@ document.addEventListener('keydown', event => {
 
 usernameInput.value = currentUser;
 updateUserStatus();
+setSyncStatus(currentUser
+  ? '☁️ 동기화 모듈을 불러오는 중...'
+  : '☁️ 유저명을 입력하면 아이패드/맥북 간 자동 동기화됩니다.');
 renderTabs();
 renderCard();
 </script>
