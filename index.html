@@ -191,6 +191,7 @@
     font-weight:700;
     font-size:18px; line-height:1.55;
     margin:0 0 20px;
+    white-space:pre-wrap;
   }
   .question-image-wrap{
     display:none;
@@ -246,6 +247,7 @@
     font-family:'Noto Sans KR',sans-serif;
     transition:border-color .12s ease, background .12s ease;
   }
+  .choice > span:last-child{white-space:pre-wrap; line-height:1.55;}
   .choice:hover:not(.locked){border-color:var(--ink);}
   .choice .mark{
     flex:0 0 auto;
@@ -314,6 +316,15 @@
     color:var(--gold); margin-bottom:6px;
   }
   .exp-text{font-size:14.5px; line-height:1.65; color:var(--ink); padding-right:70px;}
+  .official-explanation{
+    display:none;
+    margin-top:14px;
+    padding:14px 16px;
+    border-left:4px solid var(--gold);
+    background:#FFF9EA;
+  }
+  .official-explanation.show{display:block;}
+  .official-explanation-text{font-size:14.5px; line-height:1.75; color:var(--ink); white-space:pre-wrap;}
   .explanation-editor{
     margin-top:16px;
     padding-top:14px;
@@ -412,6 +423,10 @@
       <div class="stamp" id="stamp">오답</div>
       <div class="exp-label">정답</div>
       <div class="exp-text" id="expText"></div>
+      <div class="official-explanation" id="officialExplanation">
+        <div class="exp-label">쉬운 해설</div>
+        <div class="official-explanation-text" id="officialExplanationText"></div>
+      </div>
       <div class="explanation-editor">
         <label class="editor-label" for="explanationInput">
           <span>해설 직접 편집</span>
@@ -440,6 +455,7 @@
 </div>
 
 <script src="정보처리기사_플래시카드_문항데이터.js"></script>
+<script src="정보처리기사_플래시카드_필수코드.js"></script>
 <script>
 const DATA = {
   "소프트웨어 설계": [
@@ -657,7 +673,7 @@ const DATA = {
     {q:"1부터 15까지 정렬된 레코드에서 이진 검색으로 14를 찾을 때 비교 횟수는?",
      c:["2회","3회","4회","5회"], a:1}
   ],
-  "필수 코드": [],
+  "필수 코드": window.ESSENTIAL_CODE_QUESTIONS || [],
   "잘못된 문장찾기": [],
   "키워드 찾기": [],
   "종류순서": []
@@ -791,6 +807,8 @@ const nextBtn = document.getElementById('nextBtn');
 const resultEl = document.getElementById('result');
 const stampEl = document.getElementById('stamp');
 const expText = document.getElementById('expText');
+const officialExplanation = document.getElementById('officialExplanation');
+const officialExplanationText = document.getElementById('officialExplanationText');
 const explanationInput = document.getElementById('explanationInput');
 const saveExplanationBtn = document.getElementById('saveExplanationBtn');
 const deleteExplanationBtn = document.getElementById('deleteExplanationBtn');
@@ -965,7 +983,12 @@ function renderCard(){
     const div = document.createElement('div');
     div.className = 'choice';
     const visibleChoiceText = isExamSubject() ? '' : choiceText;
-    div.innerHTML = `<span class="mark">${CHOICE_LABELS[idx]}</span><span>${visibleChoiceText}</span>`;
+    const mark = document.createElement('span');
+    mark.className = 'mark';
+    mark.textContent = CHOICE_LABELS[idx];
+    const label = document.createElement('span');
+    label.textContent = visibleChoiceText;
+    div.append(mark, label);
     div.onclick = () => selectChoice(idx);
     choicesEl.appendChild(div);
   });
@@ -1058,6 +1081,8 @@ function submitAnswer(){
     .map(index => `${CHOICE_LABELS[index]} ${item.c[index] || ''}`.trim())
     .join(' 또는 ');
   expText.textContent = answerText;
+  officialExplanationText.textContent = item.e || '';
+  officialExplanation.classList.toggle('show', Boolean(item.e));
   loadExplanation();
   resultEl.classList.add('show');
 
