@@ -728,6 +728,15 @@ function isExamSubject(){
   return Object.prototype.hasOwnProperty.call(EXAM_IMAGE_OFFSETS, currentSubject);
 }
 
+function getExamIndices(){
+  if(!isExamSubject()){
+    return DATA[currentSubject].map((_, index) => index);
+  }
+  const examSet = getExamSet();
+  return Array.from({length:examSet.countPerSubject}, (_, index) => examSet.start + index)
+    .filter(index => index < DATA[currentSubject].length);
+}
+
 function renderTabs(){
   tabsEl.innerHTML = "";
   Object.entries(SUBJECT_GROUPS).forEach(([groupName, groupSubjects]) => {
