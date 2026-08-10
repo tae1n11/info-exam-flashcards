@@ -466,6 +466,7 @@
 
 <script src="정보처리기사_플래시카드_문항데이터.js"></script>
 <script src="정보처리기사_플래시카드_필수코드.js"></script>
+<script src="정보처리기사_플래시카드_잘못된문장찾기.js"></script>
 <script src="정보처리기사_플래시카드_키워드.js"></script>
 <script src="정보처리기사_플래시카드_종류순서.js"></script>
 <script>
@@ -686,7 +687,7 @@ const DATA = {
      c:["2회","3회","4회","5회"], a:1}
   ],
   "필수 코드": window.ESSENTIAL_CODE_QUESTIONS || [],
-  "잘못된 문장찾기": [],
+  "잘못된 문장찾기": window.WRONG_SENTENCE_QUESTIONS || [],
   "키워드 찾기": window.KEYWORD_QUESTIONS || [],
   "종류순서": window.TYPE_ORDER_QUESTIONS || []
 };
