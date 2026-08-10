@@ -56,26 +56,35 @@
   .doc-sub{
     font-size:13px; color:var(--ink-soft); margin:0;
   }
+  .doc-top-row{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px; flex-wrap:wrap;
+    margin-bottom:8px;
+  }
+  .doc-top-row .doc-eyebrow{margin-bottom:0;}
+  .user-inline{
+    display:flex; align-items:center; gap:6px;
+  }
+  .user-inline label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px; font-weight:600; color:var(--ink-soft);
+    letter-spacing:0.04em; text-transform:uppercase;
+  }
+  .user-inline input{
+    width:128px;
+    padding:5px 8px;
+    border:1.5px solid var(--ink);
+    border-radius:3px;
+    background:#fff; color:var(--ink);
+    font-family:'Noto Sans KR',sans-serif;
+    font-size:12.5px;
+  }
+  .user-inline input:focus{outline:3px solid rgba(181,138,46,.2); border-color:var(--gold);}
   .user-row{
     display:flex; align-items:center; gap:8px; flex-wrap:wrap;
     margin-top:14px; padding-top:12px;
     border-top:1px dashed var(--paper-line);
   }
-  .user-row label{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11.5px; font-weight:600; color:var(--ink-soft);
-    letter-spacing:0.04em;
-  }
-  .user-row input{
-    flex:1; min-width:140px;
-    padding:8px 10px;
-    border:1.5px solid var(--ink);
-    border-radius:3px;
-    background:#fff; color:var(--ink);
-    font-family:'Noto Sans KR',sans-serif;
-    font-size:13px;
-  }
-  .user-row input:focus{outline:3px solid rgba(181,138,46,.2); border-color:var(--gold);}
   .user-status{
     font-family:'IBM Plex Mono',monospace;
     font-size:11px; color:var(--stamp-green);
@@ -489,12 +498,16 @@
 <div class="wrap">
 
   <div class="doc-header">
-    <div class="doc-eyebrow">출처 시나공</div>
+    <div class="doc-top-row">
+      <div class="doc-eyebrow">출처 시나공</div>
+      <div class="user-inline">
+        <label for="usernameInput">유저</label>
+        <input type="text" id="usernameInput" placeholder="이름 입력 후 Enter" maxlength="24">
+      </div>
+    </div>
     <h1>정보처리기사 필기 대비</h1>
     <p class="doc-sub">과목을 선택하고, 문제를 풀고, 제출 즉시 해설을 확인하세요.</p>
     <div class="user-row">
-      <label for="usernameInput">유저명</label>
-      <input type="text" id="usernameInput" placeholder="이름 입력 후 Enter (미입력 시 기본 저장소)" maxlength="24">
       <button class="mini-btn" id="manualSyncBtn" type="button">☁️ 지금 동기화</button>
       <span class="user-status" id="userStatus"></span>
       <span class="sync-status" id="syncStatus">☁️ 유저명을 입력하면 아이패드/맥북 간 자동 동기화됩니다.</span>
@@ -831,9 +844,53 @@ let reviewPos = 0;
 let scores = {};
 const STORAGE_KEY = 'infoEngineerFlashcardsProgressV2';
 const EXPLANATION_STORAGE_KEY = 'infoEngineerFlashcardsExplanationsV1';
+const EXPLANATION_META_KEY = 'infoEngineerFlashcardsExplanationsMetaV1';
 const USER_STORAGE_KEY = 'infoEngineerFlashcardsActiveUser';
 let currentUser = (localStorage.getItem(USER_STORAGE_KEY) || '').trim();
 let savedExplanations = {};
+// key -> { ts, deleted } : per-item "last touched" metadata used for
+// timestamp-based (last-write-wins) merging, so both additions AND
+// removals/edits made on one device correctly propagate to the other.
+let explanationsMeta = {};
+
+/* ===== 30일 만료 규칙 (tombstone expiry) =====
+   북마크 해제/오답 정정/해설 삭제 같은 "제거" 동작은 언제 일어났는지
+   타임스탬프(tombstone)로 남겨둬야만 다른 기기의 오래된 데이터가
+   되살아나는(resurrect) 걸 막을 수 있습니다.
+   다만 이 타임스탬프를 무한정 쌓아두면 저장 용량이 계속 커지므로,
+   "마지막 동기화로부터 30일이 지난 비활성(제거된) 항목의 타임스탬프는
+   더 이상 필요 없다"고 보고 정리합니다. 30일이면 두 기기 모두
+   그 사이에 최소 한 번은 온라인 상태로 동기화됐을 것이라고 가정하는
+   합리적인 유예 기간입니다.
+   예시: 어떤 문제를 오답노트에서 30일 전에 "정정 완료"로 지웠다면,
+   그 지운 기록(ts)은 30일 후 자동으로 정리 대상이 되고, 이후로는
+   단순 병합(union) 규칙으로 되돌아갑니다. */
+const TOMBSTONE_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30일
+
+function isExpiredTombstone(ts){
+  return typeof ts === 'number' && (Date.now() - ts) > TOMBSTONE_EXPIRY_MS;
+}
+
+// 비활성 상태(체크 해제/삭제)로 30일 넘게 조용히 있었던 타임스탬프만 정리합니다.
+// 활성 상태이거나 최근 30일 이내에 변경된 항목은 병합 정확도를 위해 그대로 둡니다.
+function pruneExpiredItemTombstones(tsMap, activeSet){
+  Object.keys(tsMap).forEach(key => {
+    const idx = Number(key);
+    const isActive = activeSet.has(idx);
+    if(!isActive && isExpiredTombstone(tsMap[key])){
+      delete tsMap[key];
+    }
+  });
+}
+
+function pruneExpiredExplanationTombstones(){
+  Object.keys(explanationsMeta).forEach(key => {
+    const meta = explanationsMeta[key];
+    if(meta && meta.deleted && isExpiredTombstone(meta.ts)){
+      delete explanationsMeta[key];
+    }
+  });
+}
 
 // A username-scoped key lets each person keep separate progress/bookmarks
 // in the same browser. Leaving the name blank keeps using the original
@@ -844,13 +901,23 @@ function scopedKey(base){
 
 function loadUserData(){
   scores = {};
-  subjects.forEach(s => scores[s] = {correct:0, wrong:0, done:new Set(), wrongItems:new Set(), bookmarks:new Set()});
+  subjects.forEach(s => scores[s] = {
+    correct:0, wrong:0, done:new Set(), wrongItems:new Set(), bookmarks:new Set(),
+    // ts: 각 문제 인덱스가 마지막으로 "체크/해제"된 시각. 양방향 병합(LWW)에 사용.
+    ts:{wrongItems:{}, bookmarks:{}}
+  });
 
   try{
     savedExplanations = JSON.parse(localStorage.getItem(scopedKey(EXPLANATION_STORAGE_KEY)) || '{}');
   }catch(error){
     console.warn('저장된 해설을 불러오지 못했습니다.', error);
     savedExplanations = {};
+  }
+  try{
+    explanationsMeta = JSON.parse(localStorage.getItem(scopedKey(EXPLANATION_META_KEY)) || '{}');
+  }catch(error){
+    console.warn('해설 동기화 메타데이터를 불러오지 못했습니다.', error);
+    explanationsMeta = {};
   }
 
   try{
@@ -860,6 +927,9 @@ function loadUserData(){
       scores[s].done = new Set((saved[s].done || []).filter(i => i < DATA[s].length));
       scores[s].wrongItems = new Set((saved[s].wrongItems || []).filter(i => i < DATA[s].length));
       scores[s].bookmarks = new Set((saved[s].bookmarks || []).filter(i => i < DATA[s].length));
+      // 구버전 데이터(ts 없음)는 legacy로 취급 — 아래 병합 로직이 자동으로 안전하게 처리합니다.
+      scores[s].ts.wrongItems = (saved[s].ts && saved[s].ts.wrongItems) || {};
+      scores[s].ts.bookmarks = (saved[s].ts && saved[s].ts.bookmarks) || {};
       scores[s].wrong = scores[s].wrongItems.size;
       scores[s].correct = Math.max(0, scores[s].done.size - scores[s].wrong);
     });
@@ -873,10 +943,14 @@ loadUserData();
 function saveProgress(){
   const saved = {};
   subjects.forEach(s => {
+    // 비활성(체크 해제) 상태로 30일 넘게 조용했던 tombstone은 정리하고 저장합니다.
+    pruneExpiredItemTombstones(scores[s].ts.wrongItems, scores[s].wrongItems);
+    pruneExpiredItemTombstones(scores[s].ts.bookmarks, scores[s].bookmarks);
     saved[s] = {
       done:[...scores[s].done],
       wrongItems:[...scores[s].wrongItems],
-      bookmarks:[...scores[s].bookmarks]
+      bookmarks:[...scores[s].bookmarks],
+      ts:{ wrongItems: scores[s].ts.wrongItems, bookmarks: scores[s].ts.bookmarks }
     };
   });
   localStorage.setItem(scopedKey(STORAGE_KEY), JSON.stringify(saved));
@@ -1091,10 +1165,13 @@ function switchUser(rawName){
 }
 
 /* ===== 클라우드 동기화 (Firestore) =====
-   같은 유저명으로 다른 기기에서 접속하면 오답/북마크/해설 메모가
-   자동으로 합쳐지고(union merge), 합쳐진 결과가 다시 클라우드로 올라갑니다.
-   주의: 북마크/오답 표시를 "해제"한 것은 클라우드 병합 특성상
-   다른 기기로 자동 전파되지 않습니다 (추가된 내용만 항상 합쳐집니다). */
+   같은 유저명으로 다른 기기에서 접속하면 오답/북마크/해설 메모가 자동으로
+   합쳐지고, 합쳐진 결과가 다시 클라우드로 올라갑니다. "완료" 여부만 단순
+   union(추가 병합)이고, 북마크·오답노트·해설처럼 사용자가 되돌릴 수 있는
+   값은 각 항목의 마지막 변경 시각(ts)을 비교해 더 최근에 바뀐 쪽(추가든
+   "해제/삭제"든)을 그대로 채택하는 양방향(last-write-wins) 병합입니다.
+   자세한 구현은 mergeToggleSet / mergeExplanations, tombstone 만료
+   규칙은 상단의 TOMBSTONE_EXPIRY_MS 관련 함수를 참고하세요. */
 let cloudSyncTimer = null;
 
 function setSyncStatus(text){
@@ -1107,10 +1184,11 @@ function buildCloudPayload(){
     progress[s] = {
       done:[...scores[s].done],
       wrongItems:[...scores[s].wrongItems],
-      bookmarks:[...scores[s].bookmarks]
+      bookmarks:[...scores[s].bookmarks],
+      ts:{ wrongItems: scores[s].ts.wrongItems, bookmarks: scores[s].ts.bookmarks }
     };
   });
-  return { progress, explanations: savedExplanations };
+  return { progress, explanations: savedExplanations, explanationsMeta };
 }
 
 function scheduleCloudPush(){
@@ -1129,6 +1207,77 @@ async function pushToCloud(){
     : '☁️ 동기화 실패 - 잠시 후 다시 시도해주세요.');
 }
 
+/* ===== 양방향 병합 (last-write-wins) =====
+   "완료(done)" 여부는 사람이 되돌릴 일이 없는 grow-only 값이라 단순 union으로 충분합니다.
+   반면 북마크·오답노트·해설은 사용자가 언제든 "해제/정정/삭제"할 수 있는 값이라,
+   단순 union(추가만 병합)으로는 한쪽 기기에서 지운 게 다른 기기에서 되살아나는
+   문제가 있었습니다. 이제는 각 문제/해설마다 "마지막으로 바뀐 시각(ts)"을 같이
+   동기화해서, 두 기기 중 더 최근에 바뀐 쪽 상태(추가든 삭제든)를 그대로 채택합니다. */
+function mergeToggleSet(localSet, localTs, cloudList, cloudTsMap, maxLen){
+  let changed = false;
+  const cloudActive = new Set((cloudList || []).filter(i => i < maxLen));
+  const allKeys = new Set([
+    ...Object.keys(localTs).map(Number),
+    ...Object.keys(cloudTsMap || {}).map(Number),
+    ...cloudActive
+  ]);
+  allKeys.forEach(idx => {
+    if(!(idx < maxLen)) return;
+    const localActive = localSet.has(idx);
+    const localItemTs = localTs[idx] || 0;
+    const cloudItemTs = (cloudTsMap && cloudTsMap[idx]) || 0;
+    if(!localItemTs && !cloudItemTs){
+      // 양쪽 다 타임스탬프가 없는 구버전(legacy) 데이터 — 예전처럼 "추가만" 병합해
+      // 근거 없이 지우는 일이 없도록 안전하게 처리합니다.
+      if(cloudActive.has(idx) && !localActive){ localSet.add(idx); changed = true; }
+      return;
+    }
+    if(cloudItemTs > localItemTs){
+      const wantActive = cloudActive.has(idx);
+      if(wantActive !== localActive){
+        if(wantActive) localSet.add(idx); else localSet.delete(idx);
+        changed = true;
+      }
+      localTs[idx] = cloudItemTs;
+    }
+  });
+  return changed;
+}
+
+function mergeExplanations(cloudExpl, cloudMeta){
+  let changed = false;
+  cloudExpl = cloudExpl || {};
+  cloudMeta = cloudMeta || {};
+  const allKeys = new Set([
+    ...Object.keys(savedExplanations), ...Object.keys(explanationsMeta),
+    ...Object.keys(cloudExpl), ...Object.keys(cloudMeta)
+  ]);
+  allKeys.forEach(key => {
+    const localMeta = explanationsMeta[key];
+    const cloudItemMeta = cloudMeta[key];
+    const localItemTs = localMeta ? localMeta.ts : 0;
+    const cloudItemTs = cloudItemMeta ? cloudItemMeta.ts : 0;
+    if(!localItemTs && !cloudItemTs){
+      // legacy: 메타데이터가 없던 예전 방식 — 없는 것만 채워넣습니다(삭제 전파 없음).
+      if(key in cloudExpl && !(key in savedExplanations)){
+        savedExplanations[key] = cloudExpl[key];
+        changed = true;
+      }
+      return;
+    }
+    if(cloudItemTs > localItemTs){
+      if(cloudItemMeta && cloudItemMeta.deleted){
+        if(key in savedExplanations){ delete savedExplanations[key]; changed = true; }
+      }else if(key in cloudExpl && savedExplanations[key] !== cloudExpl[key]){
+        savedExplanations[key] = cloudExpl[key];
+        changed = true;
+      }
+      explanationsMeta[key] = cloudItemMeta || { ts: cloudItemTs, deleted: false };
+    }
+  });
+  return changed;
+}
+
 function mergeCloudData(cloudData){
   let changed = false;
   const cloudProgress = cloudData.progress || {};
@@ -1138,22 +1287,13 @@ function mergeCloudData(cloudData){
     (src.done || []).forEach(i => {
       if(i < DATA[s].length && !scores[s].done.has(i)){ scores[s].done.add(i); changed = true; }
     });
-    (src.wrongItems || []).forEach(i => {
-      if(i < DATA[s].length && !scores[s].wrongItems.has(i)){ scores[s].wrongItems.add(i); changed = true; }
-    });
-    (src.bookmarks || []).forEach(i => {
-      if(i < DATA[s].length && !scores[s].bookmarks.has(i)){ scores[s].bookmarks.add(i); changed = true; }
-    });
+    const srcTs = src.ts || {};
+    if(mergeToggleSet(scores[s].wrongItems, scores[s].ts.wrongItems, src.wrongItems, srcTs.wrongItems, DATA[s].length)) changed = true;
+    if(mergeToggleSet(scores[s].bookmarks, scores[s].ts.bookmarks, src.bookmarks, srcTs.bookmarks, DATA[s].length)) changed = true;
     scores[s].wrong = scores[s].wrongItems.size;
     scores[s].correct = Math.max(0, scores[s].done.size - scores[s].wrong);
   });
-  const cloudExpl = cloudData.explanations || {};
-  Object.keys(cloudExpl).forEach(key => {
-    if(!(key in savedExplanations)){
-      savedExplanations[key] = cloudExpl[key];
-      changed = true;
-    }
-  });
+  if(mergeExplanations(cloudData.explanations, cloudData.explanationsMeta)) changed = true;
   return changed;
 }
 
@@ -1171,10 +1311,12 @@ async function pullFromCloud(){
   if(cloudData){
     const changed = mergeCloudData(cloudData);
     if(changed){
+      pruneExpiredExplanationTombstones();
       saveProgress();
-      localStorage.setItem(scopedKey(EXPLANATION_STORAGE_KEY), JSON.stringify(savedExplanations));
+      persistExplanations();
       const visible = getVisibleIndices();
       if(!visible.includes(currentIndex)) currentIndex = visible.length ? visible[0] : 0;
+      loadExplanation();
       renderTabs();
       renderCard();
     }
@@ -1196,6 +1338,9 @@ function toggleBookmark(){
   if(!subjectScore) return;
   if(subjectScore.bookmarks.has(currentIndex)) subjectScore.bookmarks.delete(currentIndex);
   else subjectScore.bookmarks.add(currentIndex);
+  // 지금 이 순간을 "마지막으로 손댄 시각"으로 남겨서, 다른 기기에서 이 문제를
+  // 더 오래전에 반대로 바꿔놨더라도 최신 변경(이 동작)이 이기도록 합니다.
+  subjectScore.ts.bookmarks[currentIndex] = Date.now();
   saveProgress();
   updateBookmarkBtn();
   renderStatus();
@@ -1423,6 +1568,11 @@ function loadExplanation(){
   explanationStatus.textContent = explanationInput.value ? '저장된 해설' : '';
 }
 
+function persistExplanations(){
+  localStorage.setItem(scopedKey(EXPLANATION_STORAGE_KEY), JSON.stringify(savedExplanations));
+  localStorage.setItem(scopedKey(EXPLANATION_META_KEY), JSON.stringify(explanationsMeta));
+}
+
 function saveExplanation(){
   const key = getExplanationKey();
   const text = explanationInput.value.trim();
@@ -1434,13 +1584,20 @@ function saveExplanation(){
     delete savedExplanations[key];
     explanationStatus.textContent = '빈 내용은 저장하지 않았습니다.';
   }
-  localStorage.setItem(scopedKey(EXPLANATION_STORAGE_KEY), JSON.stringify(savedExplanations));
+  // deleted:false + 지금 시각 → 다른 기기가 이보다 오래된 삭제 기록을 갖고 있어도
+  // 이 저장(작성/수정)이 최신이므로 이긴다.
+  explanationsMeta[key] = { ts: Date.now(), deleted: !text };
+  persistExplanations();
   scheduleCloudPush();
 }
 
 function deleteExplanation(){
-  delete savedExplanations[getExplanationKey()];
-  localStorage.setItem(scopedKey(EXPLANATION_STORAGE_KEY), JSON.stringify(savedExplanations));
+  const key = getExplanationKey();
+  delete savedExplanations[key];
+  // deleted:true 로 tombstone을 남겨야, 다른 기기가 갖고 있는 옛 텍스트가
+  // 되살아나지 않고 이 삭제가 그대로 전파됩니다. (30일 지나면 자동 정리됨)
+  explanationsMeta[key] = { ts: Date.now(), deleted: true };
+  persistExplanations();
   scheduleCloudPush();
   explanationInput.value = '';
   explanationStatus.textContent = '삭제되었습니다.';
@@ -1481,13 +1638,16 @@ function submitAnswer(){
     }else{
       subjectScore.wrong++;
       subjectScore.wrongItems.add(currentIndex);
+      subjectScore.ts.wrongItems[currentIndex] = Date.now();
     }
   }else if(isCorrect && subjectScore.wrongItems.has(currentIndex)){
     subjectScore.wrongItems.delete(currentIndex);
+    subjectScore.ts.wrongItems[currentIndex] = Date.now();
     subjectScore.wrong--;
     subjectScore.correct++;
   }else if(!isCorrect && !subjectScore.wrongItems.has(currentIndex)){
     subjectScore.wrongItems.add(currentIndex);
+    subjectScore.ts.wrongItems[currentIndex] = Date.now();
     subjectScore.correct--;
     subjectScore.wrong++;
   }
