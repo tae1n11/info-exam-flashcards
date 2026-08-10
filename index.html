@@ -846,6 +846,10 @@ const STORAGE_KEY = 'infoEngineerFlashcardsProgressV2';
 const EXPLANATION_STORAGE_KEY = 'infoEngineerFlashcardsExplanationsV1';
 const EXPLANATION_META_KEY = 'infoEngineerFlashcardsExplanationsMetaV1';
 const USER_STORAGE_KEY = 'infoEngineerFlashcardsActiveUser';
+// 과목별로 "마지막으로 보던 문제(회차+번호)"를 기억해 두는 저장소.
+// 다른 과목 탭을 눌렀다가 돌아와도 이전에 보던 문제로 복원하는 데 사용됩니다.
+const POSITION_STORAGE_KEY = 'infoEngineerFlashcardsLastPositionV1';
+let lastPositionBySubject = {};
 let currentUser = (localStorage.getItem(USER_STORAGE_KEY) || '').trim();
 let savedExplanations = {};
 // key -> { ts, deleted } : per-item "last touched" metadata used for
@@ -921,6 +925,13 @@ function loadUserData(){
   }
 
   try{
+    lastPositionBySubject = JSON.parse(localStorage.getItem(scopedKey(POSITION_STORAGE_KEY)) || '{}');
+  }catch(error){
+    console.warn('마지막으로 보던 위치를 불러오지 못했습니다.', error);
+    lastPositionBySubject = {};
+  }
+
+  try{
     const saved = JSON.parse(localStorage.getItem(scopedKey(STORAGE_KEY)) || '{}');
     subjects.forEach(s => {
       if(!saved[s]) return;
@@ -955,6 +966,27 @@ function saveProgress(){
   });
   localStorage.setItem(scopedKey(STORAGE_KEY), JSON.stringify(saved));
   scheduleCloudPush();
+}
+
+// 지금 보고 있는 과목/문제/회차를 기록해 둡니다. (복습 모드에서는 기록하지 않음)
+function saveCurrentPosition(){
+  if(reviewMode || !currentSubject) return;
+  lastPositionBySubject[currentSubject] = { index: currentIndex, examSetId: selectedExamSetId };
+  localStorage.setItem(scopedKey(POSITION_STORAGE_KEY), JSON.stringify(lastPositionBySubject));
+}
+
+// 특정 과목으로 이동할 때, 기억해 둔 위치가 있으면 그 문제로 복원합니다.
+// 기억해 둔 위치가 없거나 더 이상 유효하지 않으면 false를 반환합니다.
+function restorePosition(subject){
+  const remembered = lastPositionBySubject[subject];
+  if(!remembered || typeof remembered.index !== 'number') return false;
+  if(!DATA[subject] || remembered.index >= DATA[subject].length) return false;
+  if(remembered.examSetId && EXAM_SETS.some(set => set.id === remembered.examSetId)){
+    selectedExamSetId = remembered.examSetId;
+    examSetSelect.value = selectedExamSetId;
+  }
+  currentIndex = remembered.index;
+  return true;
 }
 
 const tabsEl = document.getElementById('tabs');
@@ -1043,8 +1075,8 @@ function renderTabs(){
     groupTab.onclick = () => {
       if(groupName === activeGroup) return;
       currentSubject = SUBJECT_GROUPS[groupName][0];
-      currentIndex = 0;
       wrongOnly = false;
+      if(!restorePosition(currentSubject)) currentIndex = 0;
       renderTabs();
       renderCard();
     };
@@ -1062,8 +1094,10 @@ function renderTabs(){
     tab.innerHTML = `<span class="num">${String(index+1).padStart(2,'0')}</span>${subject}`;
     tab.onclick = () => {
       currentSubject = subject;
-      const visible = getVisibleIndices();
-      currentIndex = visible.length ? visible[0] : 0;
+      if(!restorePosition(subject)){
+        const visible = getVisibleIndices();
+        currentIndex = visible.length ? visible[0] : 0;
+      }
       renderTabs();
       renderCard();
     };
@@ -1474,6 +1508,7 @@ function exportReviewNotes(){
 }
 
 function renderCard(){
+  saveCurrentPosition();
   selected = null;
   answered = false;
   const visible = getVisibleIndices();
@@ -1701,9 +1736,29 @@ function moveCard(direction){
   }
   let position = visible.indexOf(currentIndex);
   if(position < 0) position = direction > 0 ? -1 : 0;
+  // 시험 과목(과목별 기출)에서 현재 회차의 마지막 문제 다음으로 넘어가려 하면,
+  // 같은 회차 안에서 맴돌지 않고 바로 다음 회차의 첫 문제로 이동합니다.
+  const isLastQuestionForward = direction > 0 && position === visible.length - 1;
+  if(isLastQuestionForward && isExamSubject() && !wrongOnly && advanceToNextExamSet()){
+    return;
+  }
   position = (position + direction + visible.length) % visible.length;
   currentIndex = visible[position];
   renderCard();
+}
+
+// 현재 선택된 회차의 다음 회차로 이동합니다. (드롭다운에 나열된 순서 기준)
+// 다음 회차가 없으면 false를 반환해 기존 동작(같은 회차 안에서 순환)으로 되돌아갑니다.
+function advanceToNextExamSet(){
+  const currentSetPos = EXAM_SETS.findIndex(set => set.id === selectedExamSetId);
+  if(currentSetPos < 0 || currentSetPos >= EXAM_SETS.length - 1) return false;
+  selectedExamSetId = EXAM_SETS[currentSetPos + 1].id;
+  examSetSelect.value = selectedExamSetId;
+  randomOrders = {};
+  const nextVisible = getVisibleIndices();
+  currentIndex = nextVisible.length ? nextVisible[0] : 0;
+  renderCard();
+  return true;
 }
 
 function toggleWrongOnly(){
