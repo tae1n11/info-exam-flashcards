@@ -81,6 +81,18 @@
     font-size:11px; color:var(--stamp-green);
     flex-basis:100%;
   }
+  .import-btn{
+    padding:6px 10px;
+    border:1.5px solid var(--gold);
+    border-radius:3px;
+    background:var(--card-bg);
+    color:var(--gold);
+    font-family:'Noto Sans KR',sans-serif;
+    font-size:11.5px; font-weight:700;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .import-btn:hover{background:#fff;}
 
   /* ===== Subject tabs (like index tabs on an exam booklet) ===== */
   .tabs{
@@ -478,6 +490,7 @@
     <div class="user-row">
       <label for="usernameInput">유저명</label>
       <input type="text" id="usernameInput" placeholder="이름 입력 후 Enter (미입력 시 기본 저장소)" maxlength="24">
+      <button class="import-btn" id="importDefaultBtn" type="button">기본 저장소 → 이 이름으로 가져오기</button>
       <span class="user-status" id="userStatus"></span>
     </div>
   </div>
@@ -841,6 +854,7 @@ const examSetSelect = document.getElementById('examSetSelect');
 const shuffleBtn = document.getElementById('shuffleBtn');
 const usernameInput = document.getElementById('usernameInput');
 const userStatus = document.getElementById('userStatus');
+const importDefaultBtn = document.getElementById('importDefaultBtn');
 const bookmarkToggleBtn = document.getElementById('bookmarkToggleBtn');
 const reviewMixBtn = document.getElementById('reviewMixBtn');
 const exportBtn = document.getElementById('exportBtn');
@@ -1012,7 +1026,65 @@ function switchUser(rawName){
   renderCard();
 }
 
-/* ===== 북마크 ===== */
+/* ===== 기본 저장소 → 유저 계정으로 가져오기 ===== */
+function importDefaultDataToUser(){
+  if(!currentUser){
+    alert('먼저 위 칸에 유저명을 입력하고 Enter를 눌러 계정을 만든 뒤 다시 눌러주세요.');
+    return;
+  }
+
+  let defaultProgress = {};
+  let defaultExplanations = {};
+  try{
+    defaultProgress = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  }catch(error){
+    console.warn('기본 저장소 학습 기록을 읽지 못했습니다.', error);
+  }
+  try{
+    defaultExplanations = JSON.parse(localStorage.getItem(EXPLANATION_STORAGE_KEY) || '{}');
+  }catch(error){
+    console.warn('기본 저장소 해설 메모를 읽지 못했습니다.', error);
+  }
+
+  const hasProgress = Object.values(defaultProgress).some(entry =>
+    (entry?.done?.length) || (entry?.wrongItems?.length) || (entry?.bookmarks?.length)
+  );
+  const hasExplanations = Object.keys(defaultExplanations).length > 0;
+
+  if(!hasProgress && !hasExplanations){
+    alert('가져올 기본 저장소(이름을 입력하지 않았을 때 저장된) 데이터가 없습니다.');
+    return;
+  }
+
+  if(!confirm(`기본 저장소의 학습 기록/해설을 '${currentUser}' 계정으로 복사할까요?\n(이미 '${currentUser}'에 저장된 기록이 있다면 합쳐집니다.)`)){
+    return;
+  }
+
+  subjects.forEach(s => {
+    const src = defaultProgress[s];
+    if(!src) return;
+    (src.done || []).forEach(i => { if(i < DATA[s].length) scores[s].done.add(i); });
+    (src.wrongItems || []).forEach(i => { if(i < DATA[s].length) scores[s].wrongItems.add(i); });
+    (src.bookmarks || []).forEach(i => { if(i < DATA[s].length) scores[s].bookmarks.add(i); });
+    scores[s].wrong = scores[s].wrongItems.size;
+    scores[s].correct = Math.max(0, scores[s].done.size - scores[s].wrong);
+  });
+
+  Object.keys(defaultExplanations).forEach(key => {
+    if(!(key in savedExplanations)) savedExplanations[key] = defaultExplanations[key];
+  });
+
+  saveProgress();
+  localStorage.setItem(scopedKey(EXPLANATION_STORAGE_KEY), JSON.stringify(savedExplanations));
+
+  const visible = getVisibleIndices();
+  currentIndex = visible.length ? visible[0] : 0;
+  renderTabs();
+  renderCard();
+  alert(`'${currentUser}' 계정으로 가져오기가 완료되었습니다.`);
+}
+
+
 function isCurrentBookmarked(){
   return Boolean(scores[currentSubject]) && scores[currentSubject].bookmarks.has(currentIndex);
 }
@@ -1416,6 +1488,7 @@ usernameInput.addEventListener('keydown', event => {
     usernameInput.blur();
   }
 });
+importDefaultBtn.addEventListener('click', importDefaultDataToUser);
 saveExplanationBtn.addEventListener('click', saveExplanation);
 deleteExplanationBtn.addEventListener('click', deleteExplanation);
 questionImage.addEventListener('click', () => {
