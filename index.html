@@ -437,7 +437,7 @@
         <div class="official-explanation-text" id="officialExplanationText"></div>
         <img class="official-explanation-image" id="officialExplanationImage" alt="문제 해설 원본 이미지">
       </div>
-      <div class="explanation-editor">
+      <div class="explanation-editor" id="explanationEditor">
         <label class="editor-label" for="explanationInput">
           <span>해설 직접 편집</span>
           <small>이 브라우저에 문항별로 저장됩니다.</small>
@@ -466,6 +466,7 @@
 
 <script src="정보처리기사_플래시카드_문항데이터.js"></script>
 <script src="정보처리기사_플래시카드_필수코드.js"></script>
+<script src="정보처리기사_플래시카드_키워드.js"></script>
 <script>
 const DATA = {
   "소프트웨어 설계": [
@@ -685,7 +686,7 @@ const DATA = {
   ],
   "필수 코드": window.ESSENTIAL_CODE_QUESTIONS || [],
   "잘못된 문장찾기": [],
-  "키워드 찾기": [],
+  "키워드 찾기": window.KEYWORD_QUESTIONS || [],
   "종류순서": []
 };
 
@@ -820,6 +821,7 @@ const expText = document.getElementById('expText');
 const officialExplanation = document.getElementById('officialExplanation');
 const officialExplanationText = document.getElementById('officialExplanationText');
 const officialExplanationImage = document.getElementById('officialExplanationImage');
+const explanationEditor = document.getElementById('explanationEditor');
 const explanationInput = document.getElementById('explanationInput');
 const saveExplanationBtn = document.getElementById('saveExplanationBtn');
 const deleteExplanationBtn = document.getElementById('deleteExplanationBtn');
@@ -963,6 +965,7 @@ function renderCard(){
     choicesEl.innerHTML = '';
     choicesEl.classList.remove('compact');
     submitBtn.disabled = true;
+    submitBtn.textContent = '제출하기';
     submitBtn.style.display = 'block';
     nextBtn.style.display = 'none';
     resultEl.classList.remove('show');
@@ -991,9 +994,10 @@ function renderCard(){
   }
   questionText.textContent = item.q;
   choicesEl.innerHTML = "";
+  const isKeywordCard = Boolean(item.answerText);
   const imageChoiceMode = isExamSubject() || Boolean(item.image);
   choicesEl.classList.toggle('compact', imageChoiceMode);
-  item.c.forEach((choiceText, idx) => {
+  (item.c || []).forEach((choiceText, idx) => {
     const div = document.createElement('div');
     div.className = 'choice';
     const visibleChoiceText = imageChoiceMode ? '' : choiceText;
@@ -1006,10 +1010,12 @@ function renderCard(){
     div.onclick = () => selectChoice(idx);
     choicesEl.appendChild(div);
   });
-  submitBtn.disabled = true;
+  submitBtn.disabled = !isKeywordCard;
+  submitBtn.textContent = isKeywordCard ? '정답 보기' : '제출하기';
   submitBtn.style.display = 'block';
   nextBtn.style.display = 'none';
   resultEl.classList.remove('show');
+  explanationEditor.style.display = isKeywordCard ? 'none' : 'block';
   const canNavigate = getVisibleIndices().length > 1;
   prevBtn.disabled = !canNavigate;
   navNextBtn.disabled = !canNavigate;
@@ -1056,9 +1062,23 @@ function deleteExplanation(){
 }
 
 function submitAnswer(){
-  if(selected === null || answered) return;
-  answered = true;
   const item = DATA[currentSubject][currentIndex];
+  if(answered) return;
+  if(item.answerText){
+    answered = true;
+    stampEl.textContent = '정답';
+    stampEl.className = 'stamp ok';
+    expText.textContent = item.answerText;
+    officialExplanation.classList.remove('show');
+    officialExplanationImage.removeAttribute('src');
+    officialExplanationImage.classList.remove('show');
+    resultEl.classList.add('show');
+    submitBtn.style.display = 'none';
+    nextBtn.style.display = 'block';
+    return;
+  }
+  if(selected === null) return;
+  answered = true;
   const acceptedAnswers = Array.isArray(item.a) ? item.a : [item.a];
   const isCorrect = acceptedAnswers.includes(selected);
 
