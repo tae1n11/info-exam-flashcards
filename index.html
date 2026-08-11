@@ -206,6 +206,26 @@
     background:rgba(255,255,255,.55);
   }
   .review-menu.show{display:grid;}
+  .review-scope-row{
+    grid-column:1 / -1;
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr);
+    gap:8px;
+    align-items:center;
+  }
+  .review-scope-row label{font-size:12.5px; font-weight:800; white-space:nowrap;}
+  .review-subject-select{
+    width:100%;
+    min-height:38px;
+    padding:7px 10px;
+    border:1.5px solid var(--ink);
+    border-radius:3px;
+    background:var(--card-bg);
+    color:var(--ink);
+    font-family:'Noto Sans KR',sans-serif;
+    font-size:12.5px;
+    font-weight:700;
+  }
   .review-option-btn{
     padding:9px 10px;
     border:1.5px solid var(--ink);
@@ -555,6 +575,10 @@
     <div class="review-menu-wrap" id="reviewMenuWrap">
       <button class="review-menu-btn" id="reviewMenuBtn" type="button" aria-expanded="false" aria-controls="reviewMenu">복습</button>
       <div class="review-menu" id="reviewMenu">
+        <div class="review-scope-row">
+          <label for="reviewSubjectSelect">복습 범위</label>
+          <select class="review-subject-select" id="reviewSubjectSelect" aria-label="복습할 과목 선택"></select>
+        </div>
         <button class="review-option-btn" id="reviewWrongBtn" type="button">틀린 문제 (0)</button>
         <button class="review-option-btn" id="reviewBookmarkBtn" type="button">북마크 (0)</button>
         <button class="review-option-btn" id="reviewCombinedBtn" type="button">틀린 문제+북마크 (0)</button>
@@ -873,6 +897,7 @@ let reviewMode = false;
 let reviewQueue = [];
 let reviewPos = 0;
 let reviewFilter = null;
+let reviewSubjectScope = 'all';
 let scores = {};
 const STORAGE_KEY = 'infoEngineerFlashcardsProgressV2';
 const EXPLANATION_STORAGE_KEY = 'infoEngineerFlashcardsExplanationsV1';
@@ -1059,6 +1084,7 @@ const bookmarkToggleBtn = document.getElementById('bookmarkToggleBtn');
 const reviewMenuWrap = document.getElementById('reviewMenuWrap');
 const reviewMenuBtn = document.getElementById('reviewMenuBtn');
 const reviewMenu = document.getElementById('reviewMenu');
+const reviewSubjectSelect = document.getElementById('reviewSubjectSelect');
 const reviewWrongBtn = document.getElementById('reviewWrongBtn');
 const reviewBookmarkBtn = document.getElementById('reviewBookmarkBtn');
 const reviewCombinedBtn = document.getElementById('reviewCombinedBtn');
@@ -1071,6 +1097,22 @@ EXAM_SETS.forEach(set => {
   option.value = set.id;
   option.textContent = set.label;
   examSetSelect.appendChild(option);
+});
+
+const allReviewOption = document.createElement('option');
+allReviewOption.value = 'all';
+allReviewOption.textContent = '전체 과목 통합';
+reviewSubjectSelect.appendChild(allReviewOption);
+Object.entries(SUBJECT_GROUPS).forEach(([groupName, groupSubjects]) => {
+  const group = document.createElement('optgroup');
+  group.label = groupName;
+  groupSubjects.forEach(subject => {
+    const option = document.createElement('option');
+    option.value = subject;
+    option.textContent = subject;
+    group.appendChild(option);
+  });
+  reviewSubjectSelect.appendChild(group);
 });
 
 function getExamSet(){
@@ -1098,7 +1140,8 @@ function renderTabs(){
     const label = reviewFilter === 'bookmark'
       ? '북마크'
       : reviewFilter === 'combined' ? '틀린 문제+북마크' : '틀린 문제';
-    banner.textContent = `복습 모드 · ${label} ${reviewQueue.length}개를 랜덤 순서로 풉니다`;
+    const scopeLabel = reviewSubjectScope === 'all' ? '전체 과목 통합' : reviewSubjectScope;
+    banner.textContent = `복습 모드 · ${scopeLabel} · ${label} ${reviewQueue.length}개를 랜덤 순서로 풉니다`;
     tabsEl.appendChild(banner);
     return;
   }
@@ -1149,9 +1192,10 @@ function renderTabs(){
 }
 
 function renderStatus(){
-  const wrongTotal = getReviewItems('wrong').length;
-  const bookmarkTotal = getReviewItems('bookmark').length;
-  const combinedTotal = getReviewItems('combined').length;
+  const selectedScope = reviewSubjectSelect.value || 'all';
+  const wrongTotal = getReviewItems('wrong', selectedScope).length;
+  const bookmarkTotal = getReviewItems('bookmark', selectedScope).length;
+  const combinedTotal = getReviewItems('combined', selectedScope).length;
   reviewMenuBtn.textContent = reviewMode ? '복습 종료' : '복습 ▾';
   reviewMenuBtn.classList.toggle('active', reviewMode);
   reviewWrongBtn.textContent = `틀린 문제 (${wrongTotal})`;
@@ -1437,9 +1481,11 @@ function updateBookmarkBtn(disabled){
 }
 
 /* ===== 틀린 문제 또는 북마크 복습 ===== */
-function getReviewItems(type){
+function getReviewItems(type, subjectScope = 'all'){
   const items = [];
-  subjects.forEach(s => {
+  const targetSubjects = subjectScope === 'all' ? subjects : [subjectScope];
+  targetSubjects.forEach(s => {
+    if(!scores[s]) return;
     const source = type === 'bookmark'
       ? scores[s].bookmarks
       : type === 'combined'
@@ -1457,7 +1503,8 @@ function syncExamSetForCurrent(){
 }
 
 function enterReviewMode(type){
-  const items = getReviewItems(type);
+  const subjectScope = reviewSubjectSelect.value || 'all';
+  const items = getReviewItems(type, subjectScope);
   const label = type === 'bookmark'
     ? '북마크'
     : type === 'combined' ? '틀린 문제+북마크' : '틀린 문제';
@@ -1467,6 +1514,7 @@ function enterReviewMode(type){
   }
   reviewMode = true;
   reviewFilter = type;
+  reviewSubjectScope = subjectScope;
   reviewQueue = shuffleIndices(items);
   reviewPos = 0;
   wrongOnly = false;
@@ -1481,6 +1529,7 @@ function enterReviewMode(type){
 function exitReviewMode(){
   reviewMode = false;
   reviewFilter = null;
+  reviewSubjectScope = 'all';
   reviewQueue = [];
   const visible = getVisibleIndices();
   currentIndex = visible.length ? visible[0] : 0;
@@ -1814,6 +1863,7 @@ examSetSelect.addEventListener('change', selectExamSet);
 shuffleBtn.addEventListener('click', shuffleExam);
 bookmarkToggleBtn.addEventListener('click', toggleBookmark);
 reviewMenuBtn.addEventListener('click', toggleReviewMenu);
+reviewSubjectSelect.addEventListener('change', renderStatus);
 reviewWrongBtn.addEventListener('click', () => enterReviewMode('wrong'));
 reviewBookmarkBtn.addEventListener('click', () => enterReviewMode('bookmark'));
 reviewCombinedBtn.addEventListener('click', () => enterReviewMode('combined'));
