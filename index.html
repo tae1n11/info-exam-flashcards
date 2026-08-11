@@ -189,24 +189,26 @@
   }
   .review-scope-row{
     grid-column:1 / -1;
-    display:grid;
-    grid-template-columns:auto minmax(0,1fr);
+    display:block;
     gap:8px;
     align-items:center;
   }
-  .review-scope-row label{font-size:12.5px; font-weight:800; white-space:nowrap;}
-  .review-subject-select{
-    width:100%;
-    min-height:38px;
+  .review-scope-label{display:block; margin-bottom:8px; font-size:12.5px; font-weight:800;}
+  .review-subject-buttons{display:flex; flex-wrap:wrap; gap:6px;}
+  .review-subject-btn{
     padding:7px 10px;
     border:1.5px solid var(--ink);
     border-radius:3px;
     background:var(--card-bg);
     color:var(--ink);
     font-family:'Noto Sans KR',sans-serif;
-    font-size:12.5px;
+    font-size:12px;
     font-weight:700;
+    cursor:pointer;
   }
+  .review-subject-btn.active{background:var(--ink); color:#fff;}
+  .review-subject-btn.all{border-color:var(--gold); color:var(--gold);}
+  .review-subject-btn.all.active{background:var(--gold); color:#fff;}
   .review-option-btn{
     padding:9px 10px;
     border:1.5px solid var(--ink);
@@ -549,8 +551,8 @@
   <section class="review-panel" id="reviewPanel">
     <div class="review-menu" id="reviewMenu">
       <div class="review-scope-row">
-        <label for="reviewSubjectSelect">복습 범위</label>
-        <select class="review-subject-select" id="reviewSubjectSelect" aria-label="복습할 과목 선택"></select>
+        <span class="review-scope-label">복습 범위 · 여러 과목 선택 가능</span>
+        <div class="review-subject-buttons" id="reviewSubjectButtons" aria-label="복습할 과목 선택"></div>
       </div>
       <button class="review-option-btn" id="reviewWrongBtn" type="button">틀린 문제 (0)</button>
       <button class="review-option-btn" id="reviewBookmarkBtn" type="button">북마크 (0)</button>
@@ -885,8 +887,9 @@ let reviewMode = false;
 let reviewQueue = [];
 let reviewPos = 0;
 let reviewFilter = null;
-let reviewSubjectScope = 'all';
+let reviewSubjectScope = [];
 let reviewTabActive = false;
+let selectedReviewSubjects = new Set(subjects);
 let scores = {};
 const STORAGE_KEY = 'infoEngineerFlashcardsProgressV2';
 const EXPLANATION_STORAGE_KEY = 'infoEngineerFlashcardsExplanationsV1';
@@ -1072,7 +1075,7 @@ const bookmarkToggleBtn = document.getElementById('bookmarkToggleBtn');
 const reviewPanel = document.getElementById('reviewPanel');
 const reviewMenu = document.getElementById('reviewMenu');
 const reviewExitBtn = document.getElementById('reviewExitBtn');
-const reviewSubjectSelect = document.getElementById('reviewSubjectSelect');
+const reviewSubjectButtons = document.getElementById('reviewSubjectButtons');
 const reviewWrongBtn = document.getElementById('reviewWrongBtn');
 const reviewBookmarkBtn = document.getElementById('reviewBookmarkBtn');
 const reviewCombinedBtn = document.getElementById('reviewCombinedBtn');
@@ -1090,20 +1093,21 @@ EXAM_SETS.forEach(set => {
   examSetSelect.appendChild(option);
 });
 
-const allReviewOption = document.createElement('option');
-allReviewOption.value = 'all';
-allReviewOption.textContent = '전체 과목 통합';
-reviewSubjectSelect.appendChild(allReviewOption);
-Object.entries(SUBJECT_GROUPS).forEach(([groupName, groupSubjects]) => {
-  const group = document.createElement('optgroup');
-  group.label = groupName;
-  groupSubjects.forEach(subject => {
-    const option = document.createElement('option');
-    option.value = subject;
-    option.textContent = subject;
-    group.appendChild(option);
-  });
-  reviewSubjectSelect.appendChild(group);
+const reviewSubjectButtonMap = new Map();
+const allReviewSubjectsBtn = document.createElement('button');
+allReviewSubjectsBtn.type = 'button';
+allReviewSubjectsBtn.className = 'review-subject-btn all';
+allReviewSubjectsBtn.textContent = '전체 과목';
+allReviewSubjectsBtn.addEventListener('click', () => toggleReviewSubject('all'));
+reviewSubjectButtons.appendChild(allReviewSubjectsBtn);
+subjects.forEach(subject => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'review-subject-btn';
+  button.textContent = subject;
+  button.addEventListener('click', () => toggleReviewSubject(subject));
+  reviewSubjectButtonMap.set(subject, button);
+  reviewSubjectButtons.appendChild(button);
 });
 
 function getExamSet(){
@@ -1126,9 +1130,34 @@ function getExamIndices(){
 function clearReviewState(){
   reviewMode = false;
   reviewFilter = null;
-  reviewSubjectScope = 'all';
+  reviewSubjectScope = [];
   reviewQueue = [];
   reviewPos = 0;
+}
+
+function renderReviewSubjectButtons(){
+  const allSelected = selectedReviewSubjects.size === subjects.length;
+  allReviewSubjectsBtn.classList.toggle('active', allSelected);
+  allReviewSubjectsBtn.setAttribute('aria-pressed', String(allSelected));
+  reviewSubjectButtonMap.forEach((button, subject) => {
+    const selected = selectedReviewSubjects.has(subject);
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+}
+
+function toggleReviewSubject(subject){
+  if(subject === 'all'){
+    selectedReviewSubjects = selectedReviewSubjects.size === subjects.length
+      ? new Set()
+      : new Set(subjects);
+  }else if(selectedReviewSubjects.has(subject)){
+    selectedReviewSubjects.delete(subject);
+  }else{
+    selectedReviewSubjects.add(subject);
+  }
+  renderReviewSubjectButtons();
+  renderStatus();
 }
 
 function renderTabs(){
@@ -1175,7 +1204,11 @@ function renderTabs(){
       const label = reviewFilter === 'bookmark'
         ? '북마크'
         : reviewFilter === 'combined' ? '틀린 문제+북마크' : '틀린 문제';
-      const scopeLabel = reviewSubjectScope === 'all' ? '전체 과목 통합' : reviewSubjectScope;
+      const scopeLabel = reviewSubjectScope.length === subjects.length
+        ? '전체 과목 통합'
+        : reviewSubjectScope.length === 1
+          ? reviewSubjectScope[0]
+          : `${reviewSubjectScope[0]} 외 ${reviewSubjectScope.length - 1}개 과목`;
       banner.textContent = `복습 모드 · ${scopeLabel} · ${label} ${reviewQueue.length}개를 랜덤 순서로 풉니다`;
       tabsEl.appendChild(banner);
     }
@@ -1206,10 +1239,10 @@ function renderTabs(){
 }
 
 function renderStatus(){
-  const selectedScope = reviewSubjectSelect.value || 'all';
-  const wrongTotal = getReviewItems('wrong', selectedScope).length;
-  const bookmarkTotal = getReviewItems('bookmark', selectedScope).length;
-  const combinedTotal = getReviewItems('combined', selectedScope).length;
+  const selectedScopes = [...selectedReviewSubjects];
+  const wrongTotal = getReviewItems('wrong', selectedScopes).length;
+  const bookmarkTotal = getReviewItems('bookmark', selectedScopes).length;
+  const combinedTotal = getReviewItems('combined', selectedScopes).length;
   reviewWrongBtn.textContent = `틀린 문제 (${wrongTotal})`;
   reviewWrongBtn.disabled = wrongTotal === 0;
   reviewBookmarkBtn.textContent = `북마크 (${bookmarkTotal})`;
@@ -1516,10 +1549,9 @@ function updateBookmarkBtn(disabled){
 }
 
 /* ===== 틀린 문제 또는 북마크 복습 ===== */
-function getReviewItems(type, subjectScope = 'all'){
+function getReviewItems(type, subjectScopes = subjects){
   const items = [];
-  const targetSubjects = subjectScope === 'all' ? subjects : [subjectScope];
-  targetSubjects.forEach(s => {
+  subjectScopes.forEach(s => {
     if(!scores[s]) return;
     const source = type === 'bookmark'
       ? scores[s].bookmarks
@@ -1538,8 +1570,12 @@ function syncExamSetForCurrent(){
 }
 
 function enterReviewMode(type){
-  const subjectScope = reviewSubjectSelect.value || 'all';
-  const items = getReviewItems(type, subjectScope);
+  const subjectScopes = [...selectedReviewSubjects];
+  if(!subjectScopes.length){
+    alert('복습할 과목을 하나 이상 선택해 주세요.');
+    return;
+  }
+  const items = getReviewItems(type, subjectScopes);
   const label = type === 'bookmark'
     ? '북마크'
     : type === 'combined' ? '틀린 문제+북마크' : '틀린 문제';
@@ -1550,7 +1586,7 @@ function enterReviewMode(type){
   reviewMode = true;
   reviewTabActive = true;
   reviewFilter = type;
-  reviewSubjectScope = subjectScope;
+  reviewSubjectScope = subjectScopes;
   reviewQueue = shuffleIndices(items);
   reviewPos = 0;
   wrongOnly = false;
@@ -1886,7 +1922,6 @@ navNextBtn.addEventListener('click', () => moveCard(1));
 examSetSelect.addEventListener('change', selectExamSet);
 shuffleBtn.addEventListener('click', shuffleExam);
 bookmarkToggleBtn.addEventListener('click', toggleBookmark);
-reviewSubjectSelect.addEventListener('change', renderStatus);
 reviewWrongBtn.addEventListener('click', () => enterReviewMode('wrong'));
 reviewBookmarkBtn.addEventListener('click', () => enterReviewMode('bookmark'));
 reviewCombinedBtn.addEventListener('click', () => enterReviewMode('combined'));
@@ -1928,6 +1963,7 @@ document.addEventListener('keydown', event => {
 
 usernameInput.value = currentUser;
 setSyncState(currentUser ? 'loading' : 'idle');
+renderReviewSubjectButtons();
 renderTabs();
 renderCard();
 </script>
