@@ -95,9 +95,10 @@
   .sync-icon-btn:disabled{cursor:wait; opacity:.75;}
   .sync-icon-btn.success{border-color:var(--stamp-green); color:var(--stamp-green);}
   .sync-icon-btn.error{border-color:var(--stamp-red); color:var(--stamp-red);}
-  .sync-icon-btn.loading{width:auto; min-width:58px; padding:0 8px; font-size:11px;}
-  .sync-icon-btn.loading .sync-icon{animation:syncPulse .8s ease-in-out infinite alternate;}
-  @keyframes syncPulse{to{opacity:.45;}}
+  .sync-icon{display:inline-block;}
+  .sync-icon-btn.loading{cursor:pointer; opacity:1;}
+  .sync-icon-btn.loading .sync-icon{animation:syncSpin .8s linear infinite;}
+  @keyframes syncSpin{to{transform:rotate(360deg);}}
 
   /* ===== Subject tabs (like index tabs on an exam booklet) ===== */
   .tabs{
@@ -554,6 +555,13 @@
     text-align:center; font-size:11.5px; color:var(--ink-soft);
     margin-top:22px; font-family:'IBM Plex Mono',monospace;
   }
+  .copyright{
+    margin-top:8px;
+    text-align:center;
+    color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+  }
 
   @media (max-width:480px){
     .card{padding:20px 16px 18px;}
@@ -666,6 +674,7 @@
   </div>
 
   <div class="footer-note">과목별 기출 · 빈출문제</div>
+  <div class="copyright">© 2026 tae1n11</div>
 </div>
 
 <div class="image-modal" id="imageModal" aria-hidden="true">
@@ -1399,12 +1408,13 @@ function switchUser(rawName){
    규칙은 상단의 TOMBSTONE_EXPIRY_MS 관련 함수를 참고하세요. */
 let cloudSyncTimer = null;
 let syncVisualTimer = null;
+let manualSyncOperationId = 0;
 
 function setSyncState(state){
   clearTimeout(syncVisualTimer);
   const states = {
     idle:{icon:'☁️', label:'수동 동기화', title:'수동 동기화'},
-    loading:{icon:'로딩중', label:'동기화 로딩 중', title:'동기화 중'},
+    loading:{icon:'↻', label:'동기화 중 · 다시 누르면 정지', title:'동기화 중 · 다시 누르면 정지'},
     success:{icon:'✓', label:'동기화 완료', title:'동기화 완료'},
     error:{icon:'!', label:'동기화 실패', title:'동기화 실패'}
   };
@@ -1412,7 +1422,7 @@ function setSyncState(state){
   syncIcon.textContent = view.icon;
   manualSyncBtn.setAttribute('aria-label', view.label);
   manualSyncBtn.title = view.title;
-  manualSyncBtn.disabled = state === 'loading';
+  manualSyncBtn.disabled = false;
   manualSyncBtn.classList.toggle('loading', state === 'loading');
   manualSyncBtn.classList.toggle('success', state === 'success');
   manualSyncBtn.classList.toggle('error', state === 'error');
@@ -1437,18 +1447,23 @@ function buildCloudPayload(){
 function scheduleCloudPush(){
   if(!currentUser || !window.cloudSync) return;
   clearTimeout(cloudSyncTimer);
-  setSyncState('loading');
-  cloudSyncTimer = setTimeout(pushToCloud, 1200);
+  cloudSyncTimer = setTimeout(() => pushToCloud(), 1200);
 }
 
-async function pushToCloud(){
+function isManualSyncActive(operationId){
+  return operationId === null || operationId === manualSyncOperationId;
+}
+
+async function pushToCloud({operationId = null, showState = false} = {}){
+  if(!isManualSyncActive(operationId)) return false;
   if(!currentUser || !window.cloudSync){
-    setSyncState('error');
+    if(showState) setSyncState('error');
     return false;
   }
-  setSyncState('loading');
+  if(showState) setSyncState('loading');
   const ok = await window.cloudSync.save(currentUser, buildCloudPayload());
-  setSyncState(ok ? 'success' : 'error');
+  if(!isManualSyncActive(operationId)) return false;
+  if(showState) setSyncState(ok ? 'success' : 'error');
   return ok;
 }
 
@@ -1542,7 +1557,8 @@ function mergeCloudData(cloudData){
   return changed;
 }
 
-async function pullFromCloud(){
+async function pullFromCloud(operationId = null){
+  if(!isManualSyncActive(operationId)) return false;
   if(!currentUser){
     setSyncState('error');
     return false;
@@ -1553,6 +1569,7 @@ async function pullFromCloud(){
   }
   setSyncState('loading');
   const loadResult = await window.cloudSync.load(currentUser);
+  if(!isManualSyncActive(operationId)) return false;
   if(!loadResult || !loadResult.ok){
     setSyncState('error');
     return false;
@@ -1572,7 +1589,8 @@ async function pullFromCloud(){
     }
   }
   // Push the merged (or first-time) local state back up so both devices converge.
-  return pushToCloud();
+  clearTimeout(cloudSyncTimer);
+  return pushToCloud({operationId, showState:true});
 }
 
 window.addEventListener('cloudsync-ready', () => {
@@ -1597,6 +1615,12 @@ function waitForCloudSync(timeoutMs = 8000){
 }
 
 async function manualSync(){
+  if(manualSyncBtn.classList.contains('loading')){
+    manualSyncOperationId += 1;
+    clearTimeout(cloudSyncTimer);
+    setSyncState('idle');
+    return;
+  }
   clearTimeout(cloudSyncTimer);
   const typedUser = usernameInput.value.trim();
   if(!typedUser){
@@ -1605,13 +1629,15 @@ async function manualSync(){
     return;
   }
   if(typedUser !== currentUser) switchUser(typedUser);
+  const operationId = ++manualSyncOperationId;
   setSyncState('loading');
   const ready = await waitForCloudSync();
+  if(!isManualSyncActive(operationId)) return;
   if(!ready){
     setSyncState('error');
     return;
   }
-  await pullFromCloud();
+  await pullFromCloud(operationId);
 }
 
 function isCurrentBookmarked(){
