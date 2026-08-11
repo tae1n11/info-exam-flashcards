@@ -80,33 +80,23 @@
     font-size:12.5px;
   }
   .user-inline input:focus{outline:3px solid rgba(181,138,46,.2); border-color:var(--gold);}
-  .user-row{
-    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
-    margin-top:14px; padding-top:12px;
-    border-top:1px dashed var(--paper-line);
-  }
-  .user-status{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px; color:var(--stamp-green);
-    flex-basis:100%;
-  }
-  .sync-status{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px; color:var(--ink-soft);
-    flex-basis:100%;
-  }
-  .mini-btn{
-    padding:6px 10px;
+  .sync-icon-btn{
+    width:34px; height:31px;
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:0;
     border:1.5px solid var(--ink);
     border-radius:3px;
-    background:var(--card-bg);
+    background:#fff;
     color:var(--ink);
-    font-family:'Noto Sans KR',sans-serif;
-    font-size:11.5px; font-weight:700;
+    font-size:16px;
     cursor:pointer;
-    white-space:nowrap;
   }
-  .mini-btn:hover{background:#fff;}
+  .sync-icon-btn:hover{background:var(--card-bg);}
+  .sync-icon-btn:disabled{cursor:wait; opacity:.75;}
+  .sync-icon-btn.success{border-color:var(--stamp-green); color:var(--stamp-green);}
+  .sync-icon-btn.error{border-color:var(--stamp-red); color:var(--stamp-red);}
+  .sync-icon-btn.loading .sync-icon{animation:syncSpin .8s linear infinite;}
+  @keyframes syncSpin{to{transform:rotate(360deg);}}
 
   /* ===== Subject tabs (like index tabs on an exam booklet) ===== */
   .tabs{
@@ -114,7 +104,7 @@
   }
   .group-switch{
     display:grid;
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:repeat(3,1fr);
     gap:8px;
     margin-bottom:10px;
   }
@@ -179,25 +169,17 @@
   .status b{color:var(--ink);}
   .score-good{color:var(--stamp-green); font-weight:600;}
   .score-bad{color:var(--stamp-red); font-weight:600;}
-  .toggle-row{
-    display:block;
-    margin:0 0 14px;
-  }
-  .review-menu-wrap{position:relative;}
-  .review-menu-btn{
-    width:100%;
-    padding:8px 10px;
-    border:1.5px solid var(--stamp-green);
-    border-radius:3px;
-    background:var(--card-bg);
-    color:var(--stamp-green);
-    font-family:'Noto Sans KR',sans-serif;
-    font-size:12.5px; font-weight:700;
-    cursor:pointer;
-  }
-  .review-menu-btn.active{background:var(--stamp-green); color:#fff;}
-  .review-menu{
+  .review-panel{
     display:none;
+    margin:-6px 0 16px;
+    padding:12px;
+    border:1.5px solid var(--ink);
+    border-radius:3px;
+    background:rgba(255,255,255,.42);
+  }
+  .review-panel.show{display:block;}
+  .review-menu{
+    display:grid;
     grid-template-columns:repeat(3,1fr);
     gap:8px;
     margin-top:7px;
@@ -205,7 +187,6 @@
     border:1px dashed var(--paper-line);
     background:rgba(255,255,255,.55);
   }
-  .review-menu.show{display:grid;}
   .review-scope-row{
     grid-column:1 / -1;
     display:grid;
@@ -238,6 +219,19 @@
   }
   .review-option-btn:hover{background:#fff;}
   .review-option-btn:disabled{opacity:.4; cursor:not-allowed;}
+  .review-exit-btn{
+    display:none;
+    width:100%;
+    padding:10px 12px;
+    border:1.5px solid var(--stamp-green);
+    border-radius:3px;
+    background:var(--stamp-green);
+    color:#fff;
+    font-family:'Noto Sans KR',sans-serif;
+    font-size:13px; font-weight:800;
+    cursor:pointer;
+  }
+  .review-exit-btn.show{display:block;}
   .review-banner{
     padding:12px 14px;
     border:1.5px dashed var(--stamp-green);
@@ -543,20 +537,29 @@
       <div class="user-inline">
         <label for="usernameInput">유저</label>
         <input type="text" id="usernameInput" placeholder="이름 입력 후 Enter" maxlength="24">
+        <button class="sync-icon-btn" id="manualSyncBtn" type="button" aria-label="진행도 동기화" title="진행도 동기화"><span class="sync-icon" id="syncIcon">☁️</span></button>
       </div>
     </div>
     <h1>정보처리기사 필기 대비</h1>
     <p class="doc-sub">과목을 선택하고, 문제를 풀고, 제출 즉시 해설을 확인하세요.</p>
-    <div class="user-row">
-      <button class="mini-btn" id="manualSyncBtn" type="button">☁️ 지금 동기화</button>
-      <span class="user-status" id="userStatus"></span>
-      <span class="sync-status" id="syncStatus">☁️ 유저명을 입력하면 아이패드/맥북 간 자동 동기화됩니다.</span>
-    </div>
   </div>
 
   <div class="tabs" id="tabs"></div>
 
-  <div class="status">
+  <section class="review-panel" id="reviewPanel">
+    <div class="review-menu" id="reviewMenu">
+      <div class="review-scope-row">
+        <label for="reviewSubjectSelect">복습 범위</label>
+        <select class="review-subject-select" id="reviewSubjectSelect" aria-label="복습할 과목 선택"></select>
+      </div>
+      <button class="review-option-btn" id="reviewWrongBtn" type="button">틀린 문제 (0)</button>
+      <button class="review-option-btn" id="reviewBookmarkBtn" type="button">북마크 (0)</button>
+      <button class="review-option-btn" id="reviewCombinedBtn" type="button">틀린 문제+북마크 (0)</button>
+    </div>
+    <button class="review-exit-btn" id="reviewExitBtn" type="button">복습 종료</button>
+  </section>
+
+  <div class="status" id="studyStatus">
     <span>과목 <b id="subjectLabel">-</b></span>
     <span>문항 <b id="progressLabel">0/0</b></span>
     <span><span class="score-good" id="correctCount">0</span> 정답 · <span class="score-bad" id="wrongCount">0</span> 오답</span>
@@ -571,22 +574,7 @@
       <span class="question-jump-status" id="questionJumpStatus" aria-live="polite"></span>
     </div>
   </div>
-  <div class="toggle-row">
-    <div class="review-menu-wrap" id="reviewMenuWrap">
-      <button class="review-menu-btn" id="reviewMenuBtn" type="button" aria-expanded="false" aria-controls="reviewMenu">복습</button>
-      <div class="review-menu" id="reviewMenu">
-        <div class="review-scope-row">
-          <label for="reviewSubjectSelect">복습 범위</label>
-          <select class="review-subject-select" id="reviewSubjectSelect" aria-label="복습할 과목 선택"></select>
-        </div>
-        <button class="review-option-btn" id="reviewWrongBtn" type="button">틀린 문제 (0)</button>
-        <button class="review-option-btn" id="reviewBookmarkBtn" type="button">북마크 (0)</button>
-        <button class="review-option-btn" id="reviewCombinedBtn" type="button">틀린 문제+북마크 (0)</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
+  <div class="card" id="studyCard">
     <div class="qno-row">
       <div class="qno" id="qno">문 01</div>
       <button class="bookmark-btn" id="bookmarkToggleBtn" type="button">☆ 북마크</button>
@@ -627,7 +615,7 @@
     </div>
   </div>
 
-  <div class="navigation">
+  <div class="navigation" id="studyNavigation">
     <button class="nav-btn" id="prevBtn">← 이전 문제</button>
     <button class="nav-btn" id="navNextBtn">다음 문제 →</button>
   </div>
@@ -898,6 +886,7 @@ let reviewQueue = [];
 let reviewPos = 0;
 let reviewFilter = null;
 let reviewSubjectScope = 'all';
+let reviewTabActive = false;
 let scores = {};
 const STORAGE_KEY = 'infoEngineerFlashcardsProgressV2';
 const EXPLANATION_STORAGE_KEY = 'infoEngineerFlashcardsExplanationsV1';
@@ -1077,13 +1066,12 @@ const examControls = document.getElementById('examControls');
 const examSetSelect = document.getElementById('examSetSelect');
 const shuffleBtn = document.getElementById('shuffleBtn');
 const usernameInput = document.getElementById('usernameInput');
-const userStatus = document.getElementById('userStatus');
-const syncStatusEl = document.getElementById('syncStatus');
 const manualSyncBtn = document.getElementById('manualSyncBtn');
+const syncIcon = document.getElementById('syncIcon');
 const bookmarkToggleBtn = document.getElementById('bookmarkToggleBtn');
-const reviewMenuWrap = document.getElementById('reviewMenuWrap');
-const reviewMenuBtn = document.getElementById('reviewMenuBtn');
+const reviewPanel = document.getElementById('reviewPanel');
 const reviewMenu = document.getElementById('reviewMenu');
+const reviewExitBtn = document.getElementById('reviewExitBtn');
 const reviewSubjectSelect = document.getElementById('reviewSubjectSelect');
 const reviewWrongBtn = document.getElementById('reviewWrongBtn');
 const reviewBookmarkBtn = document.getElementById('reviewBookmarkBtn');
@@ -1091,6 +1079,9 @@ const reviewCombinedBtn = document.getElementById('reviewCombinedBtn');
 const questionNumberInput = document.getElementById('questionNumberInput');
 const questionJumpBtn = document.getElementById('questionJumpBtn');
 const questionJumpStatus = document.getElementById('questionJumpStatus');
+const studyStatus = document.getElementById('studyStatus');
+const studyCard = document.getElementById('studyCard');
+const studyNavigation = document.getElementById('studyNavigation');
 
 EXAM_SETS.forEach(set => {
   const option = document.createElement('option');
@@ -1132,19 +1123,16 @@ function getExamIndices(){
     .filter(index => index < DATA[currentSubject].length);
 }
 
+function clearReviewState(){
+  reviewMode = false;
+  reviewFilter = null;
+  reviewSubjectScope = 'all';
+  reviewQueue = [];
+  reviewPos = 0;
+}
+
 function renderTabs(){
   tabsEl.innerHTML = "";
-  if(reviewMode){
-    const banner = document.createElement('div');
-    banner.className = 'review-banner';
-    const label = reviewFilter === 'bookmark'
-      ? '북마크'
-      : reviewFilter === 'combined' ? '틀린 문제+북마크' : '틀린 문제';
-    const scopeLabel = reviewSubjectScope === 'all' ? '전체 과목 통합' : reviewSubjectScope;
-    banner.textContent = `복습 모드 · ${scopeLabel} · ${label} ${reviewQueue.length}개를 랜덤 순서로 풉니다`;
-    tabsEl.appendChild(banner);
-    return;
-  }
   const activeGroup = Object.entries(SUBJECT_GROUPS)
     .find(([, groupSubjects]) => groupSubjects.includes(currentSubject))?.[0]
     || Object.keys(SUBJECT_GROUPS)[0];
@@ -1154,10 +1142,12 @@ function renderTabs(){
   Object.keys(SUBJECT_GROUPS).forEach(groupName => {
     const groupTab = document.createElement('button');
     groupTab.type = 'button';
-    groupTab.className = 'group-tab' + (groupName === activeGroup ? ' active' : '');
+    groupTab.className = 'group-tab' + (!reviewTabActive && groupName === activeGroup ? ' active' : '');
     groupTab.textContent = groupName;
     groupTab.onclick = () => {
-      if(groupName === activeGroup) return;
+      if(!reviewTabActive && !reviewMode && groupName === activeGroup) return;
+      clearReviewState();
+      reviewTabActive = false;
       currentSubject = SUBJECT_GROUPS[groupName][0];
       wrongOnly = false;
       if(!restorePosition(currentSubject)) currentIndex = 0;
@@ -1166,7 +1156,31 @@ function renderTabs(){
     };
     groupSwitch.appendChild(groupTab);
   });
+  const reviewTab = document.createElement('button');
+  reviewTab.type = 'button';
+  reviewTab.className = 'group-tab' + (reviewTabActive ? ' active' : '');
+  reviewTab.textContent = '복습';
+  reviewTab.onclick = () => {
+    reviewTabActive = true;
+    renderTabs();
+    renderCard();
+  };
+  groupSwitch.appendChild(reviewTab);
   tabsEl.appendChild(groupSwitch);
+
+  if(reviewTabActive){
+    if(reviewMode){
+      const banner = document.createElement('div');
+      banner.className = 'review-banner';
+      const label = reviewFilter === 'bookmark'
+        ? '북마크'
+        : reviewFilter === 'combined' ? '틀린 문제+북마크' : '틀린 문제';
+      const scopeLabel = reviewSubjectScope === 'all' ? '전체 과목 통합' : reviewSubjectScope;
+      banner.textContent = `복습 모드 · ${scopeLabel} · ${label} ${reviewQueue.length}개를 랜덤 순서로 풉니다`;
+      tabsEl.appendChild(banner);
+    }
+    return;
+  }
 
   const panel = document.createElement('section');
   panel.className = 'tab-panel';
@@ -1196,8 +1210,6 @@ function renderStatus(){
   const wrongTotal = getReviewItems('wrong', selectedScope).length;
   const bookmarkTotal = getReviewItems('bookmark', selectedScope).length;
   const combinedTotal = getReviewItems('combined', selectedScope).length;
-  reviewMenuBtn.textContent = reviewMode ? '복습 종료' : '복습 ▾';
-  reviewMenuBtn.classList.toggle('active', reviewMode);
   reviewWrongBtn.textContent = `틀린 문제 (${wrongTotal})`;
   reviewWrongBtn.disabled = wrongTotal === 0;
   reviewBookmarkBtn.textContent = `북마크 (${bookmarkTotal})`;
@@ -1205,13 +1217,27 @@ function renderStatus(){
   reviewCombinedBtn.textContent = `틀린 문제+북마크 (${combinedTotal})`;
   reviewCombinedBtn.disabled = combinedTotal === 0;
 
+  reviewPanel.classList.toggle('show', reviewTabActive);
+  reviewMenu.style.display = reviewMode ? 'none' : 'grid';
+  reviewExitBtn.classList.toggle('show', reviewMode);
+
+  if(reviewTabActive && !reviewMode){
+    studyStatus.style.display = 'none';
+    studyCard.style.display = 'none';
+    studyNavigation.style.display = 'none';
+    examControls.classList.remove('show');
+    return;
+  }
+
+  studyStatus.style.display = '';
+  studyCard.style.display = '';
+  studyNavigation.style.display = '';
+
   if(reviewMode){
     subjectLabel.textContent = `${currentSubject} (복습)`;
     progressLabel.textContent = reviewQueue.length ? `${reviewPos+1}/${reviewQueue.length}` : '0/0';
     correctCountEl.textContent = scores[currentSubject].correct;
     wrongCountEl.textContent = scores[currentSubject].wrong;
-    reviewMenu.classList.remove('show');
-    reviewMenuBtn.setAttribute('aria-expanded', 'false');
     examControls.classList.remove('show');
     return;
   }
@@ -1256,30 +1282,23 @@ function shuffleIndices(indices){
 }
 
 /* ===== 유저명 ===== */
-function updateUserStatus(){
-  userStatus.textContent = currentUser
-    ? `'${currentUser}' 님의 학습 기록을 저장/불러오는 중입니다.`
-    : '이름을 입력하면 그 이름으로 진행도가 따로 저장됩니다. (현재: 기본 저장소)';
-}
-
 function switchUser(rawName){
   const trimmed = (rawName || '').trim();
   usernameInput.value = trimmed;
   if(trimmed === currentUser){
-    updateUserStatus();
+    pullFromCloud();
     return;
   }
   currentUser = trimmed;
   localStorage.setItem(USER_STORAGE_KEY, currentUser);
   loadUserData();
   wrongOnly = false;
-  reviewMode = false;
-  reviewQueue = [];
+  clearReviewState();
+  reviewTabActive = false;
   randomOrders = {};
   currentSubject = subjects[0];
   const visible = getVisibleIndices();
   currentIndex = visible.length ? visible[0] : 0;
-  updateUserStatus();
   renderTabs();
   renderCard();
   pullFromCloud();
@@ -1294,9 +1313,27 @@ function switchUser(rawName){
    자세한 구현은 mergeToggleSet / mergeExplanations, tombstone 만료
    규칙은 상단의 TOMBSTONE_EXPIRY_MS 관련 함수를 참고하세요. */
 let cloudSyncTimer = null;
+let syncVisualTimer = null;
 
-function setSyncStatus(text){
-  if(syncStatusEl) syncStatusEl.textContent = text;
+function setSyncState(state){
+  clearTimeout(syncVisualTimer);
+  const states = {
+    idle:{icon:'☁️', label:'진행도 동기화', title:'진행도 동기화'},
+    loading:{icon:'↻', label:'동기화 로딩 중', title:'동기화 중'},
+    success:{icon:'✓', label:'동기화 완료', title:'동기화 완료'},
+    error:{icon:'!', label:'동기화 실패', title:'동기화 실패'}
+  };
+  const view = states[state] || states.idle;
+  syncIcon.textContent = view.icon;
+  manualSyncBtn.setAttribute('aria-label', view.label);
+  manualSyncBtn.title = view.title;
+  manualSyncBtn.disabled = state === 'loading';
+  manualSyncBtn.classList.toggle('loading', state === 'loading');
+  manualSyncBtn.classList.toggle('success', state === 'success');
+  manualSyncBtn.classList.toggle('error', state === 'error');
+  if(state === 'success' || state === 'error'){
+    syncVisualTimer = setTimeout(() => setSyncState('idle'), 1800);
+  }
 }
 
 function buildCloudPayload(){
@@ -1315,17 +1352,15 @@ function buildCloudPayload(){
 function scheduleCloudPush(){
   if(!currentUser || !window.cloudSync) return;
   clearTimeout(cloudSyncTimer);
-  setSyncStatus('☁️ 동기화 대기 중...');
+  setSyncState('loading');
   cloudSyncTimer = setTimeout(pushToCloud, 1200);
 }
 
 async function pushToCloud(){
   if(!currentUser || !window.cloudSync) return;
-  setSyncStatus('☁️ 동기화 중...');
+  setSyncState('loading');
   const ok = await window.cloudSync.save(currentUser, buildCloudPayload());
-  setSyncStatus(ok
-    ? `☁️ 동기화 완료 (${new Date().toLocaleTimeString('ko-KR')})`
-    : '☁️ 동기화 실패 - 잠시 후 다시 시도해주세요.');
+  setSyncState(ok ? 'success' : 'error');
 }
 
 /* ===== 양방향 병합 (last-write-wins) =====
@@ -1420,14 +1455,14 @@ function mergeCloudData(cloudData){
 
 async function pullFromCloud(){
   if(!currentUser){
-    setSyncStatus('☁️ 유저명을 입력하면 아이패드/맥북 간 자동 동기화됩니다.');
+    setSyncState('idle');
     return;
   }
   if(!window.cloudSync){
-    setSyncStatus('☁️ 동기화 모듈을 불러오는 중...');
+    setSyncState('loading');
     return;
   }
-  setSyncStatus('☁️ 불러오는 중...');
+  setSyncState('loading');
   const cloudData = await window.cloudSync.load(currentUser);
   if(cloudData){
     const changed = mergeCloudData(cloudData);
@@ -1513,6 +1548,7 @@ function enterReviewMode(type){
     return;
   }
   reviewMode = true;
+  reviewTabActive = true;
   reviewFilter = type;
   reviewSubjectScope = subjectScope;
   reviewQueue = shuffleIndices(items);
@@ -1527,24 +1563,12 @@ function enterReviewMode(type){
 }
 
 function exitReviewMode(){
-  reviewMode = false;
-  reviewFilter = null;
-  reviewSubjectScope = 'all';
-  reviewQueue = [];
+  clearReviewState();
+  reviewTabActive = true;
   const visible = getVisibleIndices();
   currentIndex = visible.length ? visible[0] : 0;
   renderTabs();
   renderCard();
-}
-
-function toggleReviewMenu(){
-  if(reviewMode){
-    exitReviewMode();
-    return;
-  }
-  const open = !reviewMenu.classList.contains('show');
-  reviewMenu.classList.toggle('show', open);
-  reviewMenuBtn.setAttribute('aria-expanded', String(open));
 }
 
 function renderCard(){
@@ -1862,17 +1886,11 @@ navNextBtn.addEventListener('click', () => moveCard(1));
 examSetSelect.addEventListener('change', selectExamSet);
 shuffleBtn.addEventListener('click', shuffleExam);
 bookmarkToggleBtn.addEventListener('click', toggleBookmark);
-reviewMenuBtn.addEventListener('click', toggleReviewMenu);
 reviewSubjectSelect.addEventListener('change', renderStatus);
 reviewWrongBtn.addEventListener('click', () => enterReviewMode('wrong'));
 reviewBookmarkBtn.addEventListener('click', () => enterReviewMode('bookmark'));
 reviewCombinedBtn.addEventListener('click', () => enterReviewMode('combined'));
-document.addEventListener('click', event => {
-  if(!reviewMenuWrap.contains(event.target)){
-    reviewMenu.classList.remove('show');
-    reviewMenuBtn.setAttribute('aria-expanded', 'false');
-  }
-});
+reviewExitBtn.addEventListener('click', exitReviewMode);
 questionJumpBtn.addEventListener('click', jumpToQuestion);
 questionNumberInput.addEventListener('keydown', event => {
   if(event.key === 'Enter') jumpToQuestion();
@@ -1909,10 +1927,7 @@ document.addEventListener('keydown', event => {
 });
 
 usernameInput.value = currentUser;
-updateUserStatus();
-setSyncStatus(currentUser
-  ? '☁️ 동기화 모듈을 불러오는 중...'
-  : '☁️ 유저명을 입력하면 아이패드/맥북 간 자동 동기화됩니다.');
+setSyncState(currentUser ? 'loading' : 'idle');
 renderTabs();
 renderCard();
 </script>
