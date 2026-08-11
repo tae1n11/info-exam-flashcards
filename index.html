@@ -221,6 +221,19 @@
   }
   .review-option-btn:hover{background:#fff;}
   .review-option-btn:disabled{opacity:.4; cursor:not-allowed;}
+  .review-option-btn.wrong{
+    border-color:var(--stamp-red);
+    background:#FBF0EF;
+    color:var(--stamp-red);
+  }
+  .review-option-btn.wrong:hover{background:#F7E3E1;}
+  .review-option-btn.bookmark{
+    border-color:var(--gold);
+    color:var(--gold);
+  }
+  .review-option-btn.bookmark:hover{background:#FFF9E9;}
+  .review-option-btn .wrong-label{color:var(--stamp-red);}
+  .review-option-btn .bookmark-label{color:var(--gold);}
   .review-exit-btn{
     display:none;
     width:100%;
@@ -554,9 +567,9 @@
         <span class="review-scope-label">복습 범위 · 여러 과목 선택 가능</span>
         <div class="review-subject-buttons" id="reviewSubjectButtons" aria-label="복습할 과목 선택"></div>
       </div>
-      <button class="review-option-btn" id="reviewWrongBtn" type="button">틀린 문제 (0)</button>
-      <button class="review-option-btn" id="reviewBookmarkBtn" type="button">북마크 (0)</button>
-      <button class="review-option-btn" id="reviewCombinedBtn" type="button">틀린 문제+북마크 (0)</button>
+      <button class="review-option-btn wrong" id="reviewWrongBtn" type="button">틀린 문제 (0)</button>
+      <button class="review-option-btn bookmark" id="reviewBookmarkBtn" type="button">☆ 북마크 (0)</button>
+      <button class="review-option-btn" id="reviewCombinedBtn" type="button"><span class="wrong-label">틀린 문제</span> + <span class="bookmark-label">☆ 북마크</span> (0)</button>
     </div>
     <button class="review-exit-btn" id="reviewExitBtn" type="button">복습 종료</button>
   </section>
@@ -1245,9 +1258,9 @@ function renderStatus(){
   const combinedTotal = getReviewItems('combined', selectedScopes).length;
   reviewWrongBtn.textContent = `틀린 문제 (${wrongTotal})`;
   reviewWrongBtn.disabled = wrongTotal === 0;
-  reviewBookmarkBtn.textContent = `북마크 (${bookmarkTotal})`;
+  reviewBookmarkBtn.textContent = `☆ 북마크 (${bookmarkTotal})`;
   reviewBookmarkBtn.disabled = bookmarkTotal === 0;
-  reviewCombinedBtn.textContent = `틀린 문제+북마크 (${combinedTotal})`;
+  reviewCombinedBtn.innerHTML = `<span class="wrong-label">틀린 문제</span> + <span class="bookmark-label">☆ 북마크</span> (${combinedTotal})`;
   reviewCombinedBtn.disabled = combinedTotal === 0;
 
   reviewPanel.classList.toggle('show', reviewTabActive);
