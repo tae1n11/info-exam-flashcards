@@ -198,7 +198,7 @@
   .review-menu-btn.active{background:var(--stamp-green); color:#fff;}
   .review-menu{
     display:none;
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:repeat(3,1fr);
     gap:8px;
     margin-top:7px;
     padding:9px;
@@ -557,6 +557,7 @@
       <div class="review-menu" id="reviewMenu">
         <button class="review-option-btn" id="reviewWrongBtn" type="button">틀린 문제 (0)</button>
         <button class="review-option-btn" id="reviewBookmarkBtn" type="button">북마크 (0)</button>
+        <button class="review-option-btn" id="reviewCombinedBtn" type="button">틀린 문제+북마크 (0)</button>
       </div>
     </div>
   </div>
@@ -1060,6 +1061,7 @@ const reviewMenuBtn = document.getElementById('reviewMenuBtn');
 const reviewMenu = document.getElementById('reviewMenu');
 const reviewWrongBtn = document.getElementById('reviewWrongBtn');
 const reviewBookmarkBtn = document.getElementById('reviewBookmarkBtn');
+const reviewCombinedBtn = document.getElementById('reviewCombinedBtn');
 const questionNumberInput = document.getElementById('questionNumberInput');
 const questionJumpBtn = document.getElementById('questionJumpBtn');
 const questionJumpStatus = document.getElementById('questionJumpStatus');
@@ -1093,7 +1095,9 @@ function renderTabs(){
   if(reviewMode){
     const banner = document.createElement('div');
     banner.className = 'review-banner';
-    const label = reviewFilter === 'bookmark' ? '북마크' : '틀린 문제';
+    const label = reviewFilter === 'bookmark'
+      ? '북마크'
+      : reviewFilter === 'combined' ? '틀린 문제+북마크' : '틀린 문제';
     banner.textContent = `복습 모드 · ${label} ${reviewQueue.length}개를 랜덤 순서로 풉니다`;
     tabsEl.appendChild(banner);
     return;
@@ -1147,12 +1151,15 @@ function renderTabs(){
 function renderStatus(){
   const wrongTotal = getReviewItems('wrong').length;
   const bookmarkTotal = getReviewItems('bookmark').length;
+  const combinedTotal = getReviewItems('combined').length;
   reviewMenuBtn.textContent = reviewMode ? '복습 종료' : '복습 ▾';
   reviewMenuBtn.classList.toggle('active', reviewMode);
   reviewWrongBtn.textContent = `틀린 문제 (${wrongTotal})`;
   reviewWrongBtn.disabled = wrongTotal === 0;
   reviewBookmarkBtn.textContent = `북마크 (${bookmarkTotal})`;
   reviewBookmarkBtn.disabled = bookmarkTotal === 0;
+  reviewCombinedBtn.textContent = `틀린 문제+북마크 (${combinedTotal})`;
+  reviewCombinedBtn.disabled = combinedTotal === 0;
 
   if(reviewMode){
     subjectLabel.textContent = `${currentSubject} (복습)`;
@@ -1433,7 +1440,11 @@ function updateBookmarkBtn(disabled){
 function getReviewItems(type){
   const items = [];
   subjects.forEach(s => {
-    const source = type === 'bookmark' ? scores[s].bookmarks : scores[s].wrongItems;
+    const source = type === 'bookmark'
+      ? scores[s].bookmarks
+      : type === 'combined'
+        ? new Set([...scores[s].wrongItems, ...scores[s].bookmarks])
+        : scores[s].wrongItems;
     source.forEach(index => items.push({subject:s, index}));
   });
   return items;
@@ -1447,7 +1458,9 @@ function syncExamSetForCurrent(){
 
 function enterReviewMode(type){
   const items = getReviewItems(type);
-  const label = type === 'bookmark' ? '북마크' : '틀린 문제';
+  const label = type === 'bookmark'
+    ? '북마크'
+    : type === 'combined' ? '틀린 문제+북마크' : '틀린 문제';
   if(!items.length){
     alert(`복습할 ${label}가 없습니다.`);
     return;
@@ -1803,6 +1816,7 @@ bookmarkToggleBtn.addEventListener('click', toggleBookmark);
 reviewMenuBtn.addEventListener('click', toggleReviewMenu);
 reviewWrongBtn.addEventListener('click', () => enterReviewMode('wrong'));
 reviewBookmarkBtn.addEventListener('click', () => enterReviewMode('bookmark'));
+reviewCombinedBtn.addEventListener('click', () => enterReviewMode('combined'));
 document.addEventListener('click', event => {
   if(!reviewMenuWrap.contains(event.target)){
     reviewMenu.classList.remove('show');
