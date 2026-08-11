@@ -180,25 +180,12 @@
   .score-good{color:var(--stamp-green); font-weight:600;}
   .score-bad{color:var(--stamp-red); font-weight:600;}
   .toggle-row{
-    display:flex; gap:8px;
+    display:block;
     margin:0 0 14px;
   }
-  .review-toggle{
-    flex:1;
-    margin:0;
-    padding:8px 10px;
-    border:1.5px solid var(--stamp-red);
-    border-radius:3px;
-    background:var(--card-bg);
-    color:var(--stamp-red);
-    font-family:'Noto Sans KR',sans-serif;
-    font-size:12.5px; font-weight:700;
-    cursor:pointer;
-  }
-  .review-toggle.active{background:var(--stamp-red); color:#fff;}
-  .review-mix-btn{
-    flex:1;
-    margin:0;
+  .review-menu-wrap{position:relative;}
+  .review-menu-btn{
+    width:100%;
     padding:8px 10px;
     border:1.5px solid var(--stamp-green);
     border-radius:3px;
@@ -208,12 +195,19 @@
     font-size:12.5px; font-weight:700;
     cursor:pointer;
   }
-  .review-mix-btn.active{background:var(--stamp-green); color:#fff;}
-  .export-btn{
-    display:block;
-    width:100%;
-    margin:0 0 14px;
-    padding:9px 12px;
+  .review-menu-btn.active{background:var(--stamp-green); color:#fff;}
+  .review-menu{
+    display:none;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-top:7px;
+    padding:9px;
+    border:1px dashed var(--paper-line);
+    background:rgba(255,255,255,.55);
+  }
+  .review-menu.show{display:grid;}
+  .review-option-btn{
+    padding:9px 10px;
     border:1.5px solid var(--ink);
     border-radius:3px;
     background:var(--card-bg);
@@ -222,8 +216,8 @@
     font-size:12.5px; font-weight:700;
     cursor:pointer;
   }
-  .export-btn:hover{background:#fff;}
-  .export-btn:disabled{opacity:.4; cursor:not-allowed;}
+  .review-option-btn:hover{background:#fff;}
+  .review-option-btn:disabled{opacity:.4; cursor:not-allowed;}
   .review-banner{
     padding:12px 14px;
     border:1.5px dashed var(--stamp-green);
@@ -253,9 +247,10 @@
   .bookmark-btn.active{background:var(--gold); color:#fff;}
   .exam-controls{
     display:none;
-    grid-template-columns:1fr auto;
+    grid-template-columns:minmax(160px,1fr) auto auto;
     gap:8px;
     margin:0 0 10px;
+    align-items:start;
   }
   .exam-controls.show{display:grid;}
   .exam-select,.shuffle-btn{
@@ -393,17 +388,13 @@
   }
   .nav-btn:hover{background:#fff;}
   .nav-btn:disabled{opacity:.35; cursor:not-allowed;}
-  .question-jump{
-    display:grid;
-    grid-template-columns:auto minmax(90px,140px) auto 1fr;
-    gap:8px;
+  .question-jump-inline{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
     align-items:center;
-    margin-top:14px;
-    padding:11px 12px;
-    border:1px dashed var(--paper-line);
-    background:rgba(251,249,243,.7);
   }
-  .question-jump label{font-size:13px; font-weight:800; white-space:nowrap;}
+  .question-jump-inline label{font-size:12.5px; font-weight:800; white-space:nowrap;}
   .question-number-input,
   .question-jump-btn{
     height:36px;
@@ -414,10 +405,10 @@
     color:var(--ink);
     font-family:'Noto Sans KR',sans-serif;
   }
-  .question-number-input{width:100%; padding:6px 9px; font-size:14px;}
+  .question-number-input{width:68px; padding:6px 9px; font-size:14px;}
   .question-jump-btn{padding:6px 14px; font-size:13px; font-weight:800; cursor:pointer;}
   .question-jump-btn:hover{background:#fff;}
-  .question-jump-status{font-size:12px; color:var(--ink-soft);}
+  .question-jump-status{flex-basis:100%; font-size:11px; color:var(--ink-soft);}
 
   /* ===== Explanation / stamp ===== */
   .result{
@@ -516,8 +507,10 @@
     .card{padding:20px 16px 18px;}
     .exp-text{padding-right:0;}
     .stamp{position:static; display:inline-block; margin-bottom:10px;}
-    .question-jump{grid-template-columns:auto 1fr auto;}
-    .question-jump-status{grid-column:1 / 4;}
+    .exam-controls{grid-template-columns:1fr auto;}
+    .exam-select{grid-column:1 / 3;}
+    .question-jump-inline{justify-content:flex-end;}
+    .review-menu{grid-template-columns:1fr;}
   }
 </style>
 </head>
@@ -551,12 +544,22 @@
   <div class="exam-controls" id="examControls">
     <select class="exam-select" id="examSetSelect" aria-label="연도와 회차 선택"></select>
     <button class="shuffle-btn" id="shuffleBtn">랜덤 출제</button>
+    <div class="question-jump-inline">
+      <label for="questionNumberInput">문제번호</label>
+      <input class="question-number-input" id="questionNumberInput" type="number" min="1" inputmode="numeric" aria-label="이동할 문제번호">
+      <button class="question-jump-btn" id="questionJumpBtn" type="button">이동</button>
+      <span class="question-jump-status" id="questionJumpStatus" aria-live="polite"></span>
+    </div>
   </div>
   <div class="toggle-row">
-    <button class="review-toggle" id="reviewToggle">틀린 문제만 보기 (0)</button>
-    <button class="review-mix-btn" id="reviewMixBtn">오답+북마크 복습 (0)</button>
+    <div class="review-menu-wrap" id="reviewMenuWrap">
+      <button class="review-menu-btn" id="reviewMenuBtn" type="button" aria-expanded="false" aria-controls="reviewMenu">복습</button>
+      <div class="review-menu" id="reviewMenu">
+        <button class="review-option-btn" id="reviewWrongBtn" type="button">틀린 문제 (0)</button>
+        <button class="review-option-btn" id="reviewBookmarkBtn" type="button">북마크 (0)</button>
+      </div>
+    </div>
   </div>
-  <button class="export-btn" id="exportBtn" type="button">📄 오답+북마크 내보내기 (.txt)</button>
 
   <div class="card">
     <div class="qno-row">
@@ -597,13 +600,6 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="question-jump">
-    <label for="questionNumberInput">문제번호</label>
-    <input class="question-number-input" id="questionNumberInput" type="number" min="1" inputmode="numeric" aria-label="이동할 문제번호">
-    <button class="question-jump-btn" id="questionJumpBtn" type="button">이동</button>
-    <span class="question-jump-status" id="questionJumpStatus" aria-live="polite"></span>
   </div>
 
   <div class="navigation">
@@ -875,6 +871,7 @@ let randomOrders = {};
 let reviewMode = false;
 let reviewQueue = [];
 let reviewPos = 0;
+let reviewFilter = null;
 let scores = {};
 const STORAGE_KEY = 'infoEngineerFlashcardsProgressV2';
 const EXPLANATION_STORAGE_KEY = 'infoEngineerFlashcardsExplanationsV1';
@@ -1048,7 +1045,6 @@ const explanationInput = document.getElementById('explanationInput');
 const saveExplanationBtn = document.getElementById('saveExplanationBtn');
 const deleteExplanationBtn = document.getElementById('deleteExplanationBtn');
 const explanationStatus = document.getElementById('explanationStatus');
-const reviewToggle = document.getElementById('reviewToggle');
 const prevBtn = document.getElementById('prevBtn');
 const navNextBtn = document.getElementById('navNextBtn');
 const examControls = document.getElementById('examControls');
@@ -1059,8 +1055,11 @@ const userStatus = document.getElementById('userStatus');
 const syncStatusEl = document.getElementById('syncStatus');
 const manualSyncBtn = document.getElementById('manualSyncBtn');
 const bookmarkToggleBtn = document.getElementById('bookmarkToggleBtn');
-const reviewMixBtn = document.getElementById('reviewMixBtn');
-const exportBtn = document.getElementById('exportBtn');
+const reviewMenuWrap = document.getElementById('reviewMenuWrap');
+const reviewMenuBtn = document.getElementById('reviewMenuBtn');
+const reviewMenu = document.getElementById('reviewMenu');
+const reviewWrongBtn = document.getElementById('reviewWrongBtn');
+const reviewBookmarkBtn = document.getElementById('reviewBookmarkBtn');
 const questionNumberInput = document.getElementById('questionNumberInput');
 const questionJumpBtn = document.getElementById('questionJumpBtn');
 const questionJumpStatus = document.getElementById('questionJumpStatus');
@@ -1094,7 +1093,8 @@ function renderTabs(){
   if(reviewMode){
     const banner = document.createElement('div');
     banner.className = 'review-banner';
-    banner.textContent = `복습 모드 · 오답/북마크 문제 ${reviewQueue.length}개를 랜덤 순서로 풉니다`;
+    const label = reviewFilter === 'bookmark' ? '북마크' : '틀린 문제';
+    banner.textContent = `복습 모드 · ${label} ${reviewQueue.length}개를 랜덤 순서로 풉니다`;
     tabsEl.appendChild(banner);
     return;
   }
@@ -1145,22 +1145,25 @@ function renderTabs(){
 }
 
 function renderStatus(){
-  const reviewTotal = getReviewItems().length;
-  reviewMixBtn.textContent = reviewMode ? '복습 모드 종료' : `오답+북마크 복습 (${reviewTotal})`;
-  reviewMixBtn.classList.toggle('active', reviewMode);
-  exportBtn.textContent = `📄 오답+북마크 내보내기 (${reviewTotal}문항, .txt)`;
-  exportBtn.disabled = reviewTotal === 0;
+  const wrongTotal = getReviewItems('wrong').length;
+  const bookmarkTotal = getReviewItems('bookmark').length;
+  reviewMenuBtn.textContent = reviewMode ? '복습 종료' : '복습 ▾';
+  reviewMenuBtn.classList.toggle('active', reviewMode);
+  reviewWrongBtn.textContent = `틀린 문제 (${wrongTotal})`;
+  reviewWrongBtn.disabled = wrongTotal === 0;
+  reviewBookmarkBtn.textContent = `북마크 (${bookmarkTotal})`;
+  reviewBookmarkBtn.disabled = bookmarkTotal === 0;
 
   if(reviewMode){
     subjectLabel.textContent = `${currentSubject} (복습)`;
     progressLabel.textContent = reviewQueue.length ? `${reviewPos+1}/${reviewQueue.length}` : '0/0';
     correctCountEl.textContent = scores[currentSubject].correct;
     wrongCountEl.textContent = scores[currentSubject].wrong;
-    reviewToggle.style.display = 'none';
+    reviewMenu.classList.remove('show');
+    reviewMenuBtn.setAttribute('aria-expanded', 'false');
     examControls.classList.remove('show');
     return;
   }
-  reviewToggle.style.display = '';
 
   const total = getExamIndices().length;
   const visible = getVisibleIndices();
@@ -1171,10 +1174,6 @@ function renderStatus(){
     : (total ? `${visiblePosition+1}/${total}` : '0/0');
   correctCountEl.textContent = scores[currentSubject].correct;
   wrongCountEl.textContent = scores[currentSubject].wrong;
-  reviewToggle.textContent = wrongOnly
-    ? `전체 문제 보기 (오답 ${scores[currentSubject].wrongItems.size})`
-    : `틀린 문제만 보기 (${scores[currentSubject].wrongItems.size})`;
-  reviewToggle.classList.toggle('active', wrongOnly);
   examControls.classList.toggle('show', isExamSubject());
   shuffleBtn.textContent = randomMode ? '순서대로 보기' : '랜덤 출제';
   shuffleBtn.classList.toggle('active', randomMode);
@@ -1430,12 +1429,12 @@ function updateBookmarkBtn(disabled){
   bookmarkToggleBtn.classList.toggle('active', on);
 }
 
-/* ===== 오답 + 북마크 모아서 복습 ===== */
-function getReviewItems(){
+/* ===== 틀린 문제 또는 북마크 복습 ===== */
+function getReviewItems(type){
   const items = [];
   subjects.forEach(s => {
-    const combined = new Set([...scores[s].wrongItems, ...scores[s].bookmarks]);
-    combined.forEach(index => items.push({subject:s, index}));
+    const source = type === 'bookmark' ? scores[s].bookmarks : scores[s].wrongItems;
+    source.forEach(index => items.push({subject:s, index}));
   });
   return items;
 }
@@ -1446,13 +1445,15 @@ function syncExamSetForCurrent(){
   if(match) selectedExamSetId = match.id;
 }
 
-function enterReviewMode(){
-  const items = getReviewItems();
+function enterReviewMode(type){
+  const items = getReviewItems(type);
+  const label = type === 'bookmark' ? '북마크' : '틀린 문제';
   if(!items.length){
-    alert('복습할 오답 또는 북마크된 문제가 없습니다.');
+    alert(`복습할 ${label}가 없습니다.`);
     return;
   }
   reviewMode = true;
+  reviewFilter = type;
   reviewQueue = shuffleIndices(items);
   reviewPos = 0;
   wrongOnly = false;
@@ -1466,6 +1467,7 @@ function enterReviewMode(){
 
 function exitReviewMode(){
   reviewMode = false;
+  reviewFilter = null;
   reviewQueue = [];
   const visible = getVisibleIndices();
   currentIndex = visible.length ? visible[0] : 0;
@@ -1473,75 +1475,14 @@ function exitReviewMode(){
   renderCard();
 }
 
-function toggleReviewMode(){
-  if(reviewMode) exitReviewMode();
-  else enterReviewMode();
-}
-
-/* ===== 오답+북마크 내보내기 ===== */
-function buildExportText(){
-  const lines = [];
-  const timestamp = new Date().toLocaleString('ko-KR');
-  lines.push('정보처리기사 플래시카드 - 오답/북마크 노트');
-  lines.push(`생성 시각: ${timestamp}`);
-  lines.push(currentUser ? `유저: ${currentUser}` : '유저: (기본 저장소)');
-  lines.push('');
-
-  let totalCount = 0;
-  subjects.forEach(s => {
-    const combined = new Set([...scores[s].wrongItems, ...scores[s].bookmarks]);
-    if(!combined.size) return;
-    lines.push(`■ ${s} (${combined.size}문항)`);
-    lines.push('-'.repeat(40));
-    [...combined].sort((a,b) => a - b).forEach(index => {
-      const item = DATA[s][index];
-      if(!item) return;
-      totalCount++;
-      const tags = [];
-      if(scores[s].wrongItems.has(index)) tags.push('오답');
-      if(scores[s].bookmarks.has(index)) tags.push('북마크');
-      lines.push(`[${tags.join('/')}] 문제 ${index+1}`);
-      lines.push(item.q || '(이미지로 제공되는 문제입니다. 사이트에서 직접 확인해주세요.)');
-      if(item.c && item.c.length){
-        item.c.forEach((choiceText, i) => {
-          const isAnswer = Array.isArray(item.a) ? item.a.includes(i) : item.a === i;
-          lines.push(`  ${isAnswer ? '✔' : ' '} ${CHOICE_LABELS[i]} ${choiceText}`);
-        });
-      }
-      if(item.answerText){
-        lines.push(`  정답: ${item.answerText}`);
-      }
-      if(item.e){
-        lines.push(`  해설: ${item.e}`);
-      }
-      const savedNote = savedExplanations[`${s}:${index}`];
-      if(savedNote){
-        lines.push(`  내 메모: ${savedNote}`);
-      }
-      lines.push('');
-    });
-    lines.push('');
-  });
-
-  if(!totalCount){
-    lines.push('내보낼 오답 또는 북마크 문제가 없습니다.');
+function toggleReviewMenu(){
+  if(reviewMode){
+    exitReviewMode();
+    return;
   }
-  return lines.join('\n');
-}
-
-function exportReviewNotes(){
-  const text = buildExportText();
-  const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  const userPart = currentUser ? `_${currentUser}` : '';
-  const dateStr = new Date().toISOString().slice(0, 10);
-  link.href = url;
-  link.download = `오답노트${userPart}_${dateStr}.txt`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const open = !reviewMenu.classList.contains('show');
+  reviewMenu.classList.toggle('show', open);
+  reviewMenuBtn.setAttribute('aria-expanded', String(open));
 }
 
 function renderCard(){
@@ -1856,12 +1797,18 @@ submitBtn.addEventListener('click', submitAnswer);
 nextBtn.addEventListener('click', nextCard);
 prevBtn.addEventListener('click', () => moveCard(-1));
 navNextBtn.addEventListener('click', () => moveCard(1));
-reviewToggle.addEventListener('click', toggleWrongOnly);
 examSetSelect.addEventListener('change', selectExamSet);
 shuffleBtn.addEventListener('click', shuffleExam);
 bookmarkToggleBtn.addEventListener('click', toggleBookmark);
-reviewMixBtn.addEventListener('click', toggleReviewMode);
-exportBtn.addEventListener('click', exportReviewNotes);
+reviewMenuBtn.addEventListener('click', toggleReviewMenu);
+reviewWrongBtn.addEventListener('click', () => enterReviewMode('wrong'));
+reviewBookmarkBtn.addEventListener('click', () => enterReviewMode('bookmark'));
+document.addEventListener('click', event => {
+  if(!reviewMenuWrap.contains(event.target)){
+    reviewMenu.classList.remove('show');
+    reviewMenuBtn.setAttribute('aria-expanded', 'false');
+  }
+});
 questionJumpBtn.addEventListener('click', jumpToQuestion);
 questionNumberInput.addEventListener('keydown', event => {
   if(event.key === 'Enter') jumpToQuestion();
