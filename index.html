@@ -393,6 +393,31 @@
   }
   .nav-btn:hover{background:#fff;}
   .nav-btn:disabled{opacity:.35; cursor:not-allowed;}
+  .question-jump{
+    display:grid;
+    grid-template-columns:auto minmax(90px,140px) auto 1fr;
+    gap:8px;
+    align-items:center;
+    margin-top:14px;
+    padding:11px 12px;
+    border:1px dashed var(--paper-line);
+    background:rgba(251,249,243,.7);
+  }
+  .question-jump label{font-size:13px; font-weight:800; white-space:nowrap;}
+  .question-number-input,
+  .question-jump-btn{
+    height:36px;
+    box-sizing:border-box;
+    border:1.5px solid var(--ink);
+    border-radius:3px;
+    background:var(--card-bg);
+    color:var(--ink);
+    font-family:'Noto Sans KR',sans-serif;
+  }
+  .question-number-input{width:100%; padding:6px 9px; font-size:14px;}
+  .question-jump-btn{padding:6px 14px; font-size:13px; font-weight:800; cursor:pointer;}
+  .question-jump-btn:hover{background:#fff;}
+  .question-jump-status{font-size:12px; color:var(--ink-soft);}
 
   /* ===== Explanation / stamp ===== */
   .result{
@@ -491,6 +516,8 @@
     .card{padding:20px 16px 18px;}
     .exp-text{padding-right:0;}
     .stamp{position:static; display:inline-block; margin-bottom:10px;}
+    .question-jump{grid-template-columns:auto 1fr auto;}
+    .question-jump-status{grid-column:1 / 4;}
   }
 </style>
 </head>
@@ -570,6 +597,13 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div class="question-jump">
+    <label for="questionNumberInput">문제번호</label>
+    <input class="question-number-input" id="questionNumberInput" type="number" min="1" inputmode="numeric" aria-label="이동할 문제번호">
+    <button class="question-jump-btn" id="questionJumpBtn" type="button">이동</button>
+    <span class="question-jump-status" id="questionJumpStatus" aria-live="polite"></span>
   </div>
 
   <div class="navigation">
@@ -1027,6 +1061,9 @@ const manualSyncBtn = document.getElementById('manualSyncBtn');
 const bookmarkToggleBtn = document.getElementById('bookmarkToggleBtn');
 const reviewMixBtn = document.getElementById('reviewMixBtn');
 const exportBtn = document.getElementById('exportBtn');
+const questionNumberInput = document.getElementById('questionNumberInput');
+const questionJumpBtn = document.getElementById('questionJumpBtn');
+const questionJumpStatus = document.getElementById('questionJumpStatus');
 
 EXAM_SETS.forEach(set => {
   const option = document.createElement('option');
@@ -1532,12 +1569,18 @@ function renderCard(){
     resultEl.classList.remove('show');
     prevBtn.disabled = true;
     navNextBtn.disabled = true;
+    questionNumberInput.value = '';
+    questionNumberInput.max = String(getExamIndices().length);
+    questionJumpStatus.textContent = '';
     updateBookmarkBtn(true);
     renderStatus();
     return;
   }
   const examSet = getExamSet();
   const localIndex = isExamSubject() ? currentIndex - examSet.start : currentIndex;
+  questionNumberInput.max = String(getExamIndices().length);
+  questionNumberInput.value = String(localIndex + 1);
+  questionJumpStatus.textContent = '';
   qnoEl.textContent = `문 ${String(localIndex+1).padStart(2,'0')}`;
   const imageOffset = EXAM_IMAGE_OFFSETS[currentSubject];
   const imageNumber = imageOffset === undefined ? null : imageOffset + localIndex + 1;
@@ -1716,6 +1759,25 @@ function nextCard(){
   moveCard(1);
 }
 
+function jumpToQuestion(){
+  if(reviewMode){
+    questionJumpStatus.textContent = '복습 모드를 종료한 뒤 문제번호로 이동해 주세요.';
+    return;
+  }
+  const number = Number(questionNumberInput.value);
+  const indices = getExamIndices();
+  if(!Number.isInteger(number) || number < 1 || number > indices.length){
+    questionJumpStatus.textContent = `1~${indices.length} 사이의 문제번호를 입력해 주세요.`;
+    return;
+  }
+  wrongOnly = false;
+  randomMode = false;
+  randomOrders = {};
+  currentIndex = indices[number - 1];
+  renderCard();
+  questionJumpStatus.textContent = `${number}번 문제로 이동했습니다.`;
+}
+
 function moveCard(direction){
   if(reviewMode){
     if(!reviewQueue.length){
@@ -1800,6 +1862,10 @@ shuffleBtn.addEventListener('click', shuffleExam);
 bookmarkToggleBtn.addEventListener('click', toggleBookmark);
 reviewMixBtn.addEventListener('click', toggleReviewMode);
 exportBtn.addEventListener('click', exportReviewNotes);
+questionJumpBtn.addEventListener('click', jumpToQuestion);
+questionNumberInput.addEventListener('keydown', event => {
+  if(event.key === 'Enter') jumpToQuestion();
+});
 usernameInput.addEventListener('change', () => switchUser(usernameInput.value));
 usernameInput.addEventListener('keydown', event => {
   if(event.key === 'Enter'){
