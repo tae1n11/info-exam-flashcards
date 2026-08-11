@@ -32,8 +32,7 @@
     <small>데이터는 주소나 외부 서비스에 노출하지 않고 새 정보처리기사 사이트로 직접 전달됩니다. 기존 Firebase와 이 브라우저의 원본 기록은 삭제하지 않습니다.</small>
   </main>
   <script>
-    const TARGET = 'https://info-exam-flashcards.taeon0111.chatgpt.site/flashcards.html#legacy-migration';
-    const PREFIX = 'info-exam-sites-migration-v1:';
+    const TARGET = 'https://info-exam-flashcards.taeon0111.chatgpt.site/flashcards.html#legacy-migration=';
     const ACTIVE_KEY = 'infoEngineerFlashcardsActiveUser';
     const BASE_KEYS = [
       'infoEngineerFlashcardsProgressV2',
@@ -75,7 +74,25 @@
       ? `브라우저 기록 ${recordCount}개 · 유저 ${found.users.size || 1}명 발견`
       : '이 브라우저에서 저장된 학습 기록을 찾지 못했습니다.';
 
-    migrateButton.addEventListener('click', () => {
+    function bytesToBase64Url(bytes){
+      let binary = '';
+      const chunkSize = 0x8000;
+      for(let i = 0; i < bytes.length; i += chunkSize){
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+    }
+
+    async function encodeBundle(bundle){
+      const raw = new TextEncoder().encode(JSON.stringify(bundle));
+      if(!('CompressionStream' in window)) return 'r.' + bytesToBase64Url(raw);
+      const compressed = await new Response(
+        new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip'))
+      ).arrayBuffer();
+      return 'g.' + bytesToBase64Url(new Uint8Array(compressed));
+    }
+
+    migrateButton.addEventListener('click', async () => {
       const username = usernameInput.value.trim();
       if(!username){
         status.textContent = '기존에 사용하던 유저명을 입력해 주세요.';
@@ -95,8 +112,14 @@
       migrateButton.disabled = true;
       migrateButton.textContent = '새 사이트로 이동 중…';
       status.textContent = '';
-      window.name = PREFIX + JSON.stringify(bundle);
-      location.href = TARGET;
+      try{
+        const encoded = await encodeBundle(bundle);
+        location.href = TARGET + encoded;
+      }catch(error){
+        migrateButton.disabled = false;
+        migrateButton.textContent = '새 사이트로 이전하기';
+        status.textContent = '기록을 포장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      }
     });
   </script>
 </body>
