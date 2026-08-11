@@ -209,6 +209,27 @@
   .review-subject-btn.active{background:var(--ink); color:#fff;}
   .review-subject-btn.all{border-color:var(--gold); color:var(--gold);}
   .review-subject-btn.all.active{background:var(--gold); color:#fff;}
+  .review-order-row{
+    grid-column:1 / -1;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-top:2px;
+  }
+  .review-order-label{font-size:12.5px; font-weight:800;}
+  .review-order-buttons{display:flex; gap:6px;}
+  .review-order-btn{
+    padding:7px 14px;
+    border:1.5px solid var(--ink);
+    border-radius:3px;
+    background:transparent;
+    color:var(--ink);
+    font-family:'Noto Sans KR',sans-serif;
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .review-order-btn.active{background:var(--ink); color:#fff;}
   .review-option-btn{
     padding:9px 10px;
     border:1.5px solid var(--ink);
@@ -568,6 +589,13 @@
         <span class="review-scope-label">복습 범위 · 여러 과목 선택 가능</span>
         <div class="review-subject-buttons" id="reviewSubjectButtons" aria-label="복습할 과목 선택"></div>
       </div>
+      <div class="review-order-row">
+        <span class="review-order-label">출제 순서</span>
+        <div class="review-order-buttons" aria-label="복습 문제 출제 순서">
+          <button class="review-order-btn active" id="reviewOrderRandomBtn" type="button" aria-pressed="true">랜덤</button>
+          <button class="review-order-btn" id="reviewOrderSequentialBtn" type="button" aria-pressed="false">순서대로</button>
+        </div>
+      </div>
       <button class="review-option-btn wrong" id="reviewWrongBtn" type="button">틀린 문제 (0)</button>
       <button class="review-option-btn bookmark" id="reviewBookmarkBtn" type="button">☆ 북마크 (0)</button>
       <button class="review-option-btn" id="reviewCombinedBtn" type="button"><span class="wrong-label">틀린 문제</span> + <span class="bookmark-label">☆ 북마크</span> (0)</button>
@@ -902,6 +930,7 @@ let reviewQueue = [];
 let reviewPos = 0;
 let reviewFilter = null;
 let reviewSubjectScope = [];
+let reviewOrderMode = 'random';
 let reviewTabActive = false;
 let selectedReviewSubjects = new Set(subjects);
 let scores = {};
@@ -1090,6 +1119,8 @@ const reviewPanel = document.getElementById('reviewPanel');
 const reviewMenu = document.getElementById('reviewMenu');
 const reviewExitBtn = document.getElementById('reviewExitBtn');
 const reviewSubjectButtons = document.getElementById('reviewSubjectButtons');
+const reviewOrderRandomBtn = document.getElementById('reviewOrderRandomBtn');
+const reviewOrderSequentialBtn = document.getElementById('reviewOrderSequentialBtn');
 const reviewWrongBtn = document.getElementById('reviewWrongBtn');
 const reviewBookmarkBtn = document.getElementById('reviewBookmarkBtn');
 const reviewCombinedBtn = document.getElementById('reviewCombinedBtn');
@@ -1174,6 +1205,15 @@ function toggleReviewSubject(subject){
   renderStatus();
 }
 
+function setReviewOrder(mode){
+  reviewOrderMode = mode === 'sequential' ? 'sequential' : 'random';
+  const randomSelected = reviewOrderMode === 'random';
+  reviewOrderRandomBtn.classList.toggle('active', randomSelected);
+  reviewOrderRandomBtn.setAttribute('aria-pressed', String(randomSelected));
+  reviewOrderSequentialBtn.classList.toggle('active', !randomSelected);
+  reviewOrderSequentialBtn.setAttribute('aria-pressed', String(!randomSelected));
+}
+
 function renderTabs(){
   tabsEl.innerHTML = "";
   const activeGroup = Object.entries(SUBJECT_GROUPS)
@@ -1223,7 +1263,8 @@ function renderTabs(){
         : reviewSubjectScope.length === 1
           ? reviewSubjectScope[0]
           : `${reviewSubjectScope[0]} 외 ${reviewSubjectScope.length - 1}개 과목`;
-      banner.textContent = `복습 모드 · ${scopeLabel} · ${label} ${reviewQueue.length}개를 랜덤 순서로 풉니다`;
+      const orderLabel = reviewOrderMode === 'random' ? '랜덤으로' : '순서대로';
+      banner.textContent = `복습 모드 · ${scopeLabel} · ${label} ${reviewQueue.length}개를 ${orderLabel} 풉니다`;
       tabsEl.appendChild(banner);
     }
     return;
@@ -1584,7 +1625,7 @@ function syncExamSetForCurrent(){
 }
 
 function enterReviewMode(type){
-  const subjectScopes = [...selectedReviewSubjects];
+  const subjectScopes = subjects.filter(subject => selectedReviewSubjects.has(subject));
   if(!subjectScopes.length){
     alert('복습할 과목을 하나 이상 선택해 주세요.');
     return;
@@ -1601,7 +1642,11 @@ function enterReviewMode(type){
   reviewTabActive = true;
   reviewFilter = type;
   reviewSubjectScope = subjectScopes;
-  reviewQueue = shuffleIndices(items);
+  const orderedItems = [...items].sort((a,b) => {
+    const subjectDifference = subjectScopes.indexOf(a.subject) - subjectScopes.indexOf(b.subject);
+    return subjectDifference || a.index - b.index;
+  });
+  reviewQueue = reviewOrderMode === 'random' ? shuffleIndices(orderedItems) : orderedItems;
   reviewPos = 0;
   wrongOnly = false;
   randomMode = false;
@@ -1936,6 +1981,8 @@ navNextBtn.addEventListener('click', () => moveCard(1));
 examSetSelect.addEventListener('change', selectExamSet);
 shuffleBtn.addEventListener('click', shuffleExam);
 bookmarkToggleBtn.addEventListener('click', toggleBookmark);
+reviewOrderRandomBtn.addEventListener('click', () => setReviewOrder('random'));
+reviewOrderSequentialBtn.addEventListener('click', () => setReviewOrder('sequential'));
 reviewWrongBtn.addEventListener('click', () => enterReviewMode('wrong'));
 reviewBookmarkBtn.addEventListener('click', () => enterReviewMode('bookmark'));
 reviewCombinedBtn.addEventListener('click', () => enterReviewMode('combined'));
